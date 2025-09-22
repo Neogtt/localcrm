@@ -1720,7 +1720,7 @@ elif menu == "Fuar Müşteri Kayıtları":
     st.markdown("<h2 style='color:#8e54e9; font-weight:bold; text-align:center;'>🎫 FUAR MÜŞTERİ KAYITLARI</h2>", unsafe_allow_html=True)
     st.info("Fuarlarda müşteri görüşmelerinizi hızlıca buraya ekleyin. Hem yeni kayıt oluşturabilir hem de mevcut kayıtlarınızı düzenleyebilirsiniz.")
 
-    fuar_isimleri = list(df_fuar_musteri["Fuar Adı"].dropna().unique())
+        fuar_isimleri = list(df_fuar["Fuar Adı"].dropna().unique())
     yeni_fuar = st.text_input("Yeni Fuar Adı Ekleyin (Eklemek istemiyorsanız boş bırakın):").strip()
     if yeni_fuar and yeni_fuar not in fuar_isimleri:
         fuar_isimleri.append(yeni_fuar)
@@ -1755,7 +1755,7 @@ elif menu == "Fuar Müşteri Kayıtları":
                         "Satış Temsilcisi": temsilci, "Açıklamalar": aciklama,
                         "Görüşme Kalitesi": int(gorusme_kalitesi), "Tarih": pd.to_datetime(tarih)
                     }
-                    df_fuar_musteri = pd.concat([df_fuar_musteri, pd.DataFrame([new_row])], ignore_index=True)
+                    df_fuar = pd.concat([df_fuar, pd.DataFrame([new_row])], ignore_index=True)
                     update_excel()
                     st.success("Fuar müşterisi başarıyla eklendi!")
                     st.rerun()
@@ -1763,7 +1763,7 @@ elif menu == "Fuar Müşteri Kayıtları":
     # --- Eski Kayıt ---
     else:
         kolonlar = ["Müşteri Adı","Ülke","Telefon","E-mail","Satış Temsilcisi","Açıklamalar","Görüşme Kalitesi","Tarih"]
-        musteri_df = df_fuar_musteri[df_fuar_musteri["Fuar Adı"] == fuar_adi].copy()
+         musteri_df = df_fuar[df_fuar["Fuar Adı"] == fuar_adi].copy()
 
         if musteri_df.empty:
             st.info("Bu fuara ait müşteri kaydı bulunamadı.")
@@ -1797,7 +1797,7 @@ elif menu == "Fuar Müşteri Kayıtları":
                 sil = st.form_submit_button("Kaydı Sil")
 
             if guncelle:
-                df_fuar_musteri.loc[secili_index, kolonlar] = [
+                df_fuar.loc[secili_index, kolonlar] = [
                     musteri_adi, ulke, tel, email, temsilci, aciklama, int(gorusme_kalitesi), pd.to_datetime(tarih)
                 ]
                 update_excel()
