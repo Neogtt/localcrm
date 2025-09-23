@@ -426,6 +426,41 @@ default_idx = menu_names.index(st.session_state.menu_state)
 if os.path.exists(LOGO_LOCAL_NAME):
     st.sidebar.image(LOGO_LOCAL_NAME, use_column_width=True)
 
+sidebar_menu_styles = {
+    "container": {
+        "padding": "0 !important",
+        "background": "transparent",
+        "border": "0",
+        "border-radius": "18px",
+        "box-shadow": "0 18px 38px rgba(6, 20, 46, 0.28)",
+        "margin": "0",
+    },
+    "icon": {
+        "color": "#90a4c7",
+        "font-size": "1.1rem",
+        "margin-right": "0.85rem",
+    },
+    "nav-link": {
+        "font-size": "0.92rem",
+        "font-weight": "600",
+        "margin": "0.2rem 0",
+        "border-radius": "12px",
+        "padding": "0.85rem 1.1rem",
+        "color": "#c3ccda",
+        "letter-spacing": "0.05em",
+        "text-transform": "uppercase",
+        "transition": "all 0.25s ease-in-out",
+        "background": "rgba(12, 26, 52, 0.55)",
+        "border": "1px solid rgba(255, 255, 255, 0.04)",
+    },
+    "nav-link-selected": {
+        "background": "linear-gradient(135deg, #1c5de7 0%, #0f8cf2 100%)",
+        "color": "#ffffff",
+        "box-shadow": "0 16px 36px rgba(28, 93, 231, 0.45)",
+        "border": "1px solid rgba(12, 72, 201, 0.65)",
+    },
+}
+
 with st.sidebar:
     selected = option_menu(
         menu_title=None,
@@ -433,6 +468,7 @@ with st.sidebar:
         icons=menu_icons,
         default_index=default_idx,
         key="menu_option_menu",
+        tyles=sidebar_menu_styles,
     )
 
 st.session_state.menu_state = selected
@@ -1720,7 +1756,7 @@ elif menu == "Fuar Müşteri Kayıtları":
     st.markdown("<h2 style='color:#8e54e9; font-weight:bold; text-align:center;'>🎫 FUAR MÜŞTERİ KAYITLARI</h2>", unsafe_allow_html=True)
     st.info("Fuarlarda müşteri görüşmelerinizi hızlıca buraya ekleyin. Hem yeni kayıt oluşturabilir hem de mevcut kayıtlarınızı düzenleyebilirsiniz.")
 
-        fuar_isimleri = list(df_fuar["Fuar Adı"].dropna().unique())
+    fuar_isimleri = list(df_fuar["Fuar Adı"].dropna().unique())
     yeni_fuar = st.text_input("Yeni Fuar Adı Ekleyin (Eklemek istemiyorsanız boş bırakın):").strip()
     if yeni_fuar and yeni_fuar not in fuar_isimleri:
         fuar_isimleri.append(yeni_fuar)
