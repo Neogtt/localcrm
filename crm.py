@@ -2751,7 +2751,7 @@ elif menu == "Satış Analitiği":
     df_range = df_evrak[mask]
 
     aralik_toplam = float(df_range["Tutar_num"].sum())
-         st.markdown(
+    st.markdown(
         f"<div style='font-size:1.2em; color:#f7971e; font-weight:bold;'>{d1} - {d2} Arası Toplam: {aralik_toplam:,.2f} USD</div>",
         unsafe_allow_html=True,
     )
