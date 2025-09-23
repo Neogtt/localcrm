@@ -410,7 +410,7 @@ if "menu_state" not in st.session_state or st.session_state.menu_state not in LA
     st.sidebar.markdown(build_sidebar_menu_css(MENU_GROUPS), unsafe_allow_html=True)
 
     for group in MENU_GROUPS:
-            group_title = group["group"]
+        group_title = group["group"]
         entries = group.get("entries", [])
         st.sidebar.markdown(f"<div class='sidebar-section-title'>{group_title}</div>", unsafe_allow_html=True)
         group_labels = [entry["label"] for entry in entries]
