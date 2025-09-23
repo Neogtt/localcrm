@@ -421,39 +421,36 @@ if "menu_state" not in st.session_state or st.session_state.menu_state not in LA
     st.session_state.menu_state = default_menu_name
     st.sidebar.markdown(build_sidebar_menu_css(MENU_GROUPS), unsafe_allow_html=True)
 
-    for group in MENU_GROUPS:
-        group_title = group["group"]
-        entries = group.get("entries", [])
-        st.sidebar.markdown(f"<div class='sidebar-section-title'>{group_title}</div>", unsafe_allow_html=True)
-        group_labels = [entry["label"] for entry in entries]
-        entry_names = [entry["name"] for entry in entries]
-        radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group_title).lower()}"
-        previous_selection = st.session_state.get(radio_key)
+for group in MENU_GROUPS:
+    group_title = group["group"]
+    entries = group.get("entries", [])
+    st.sidebar.markdown(f"<div class='sidebar-section-title'>{group_title}</div>", unsafe_allow_html=True)
+    group_labels = [entry["label"] for entry in entries]
+    entry_names = [entry["name"] for entry in entries]
+    radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group_title).lower()}"
+    previous_selection = st.session_state.get(radio_key)
 
-        if st.session_state.menu_state in entry_names:
-            current_label = LABEL_BY_NAME[st.session_state.menu_state]
-        elif previous_selection in group_labels:
-            current_label = previous_selection
-        else:
-            current_label = group_labels[0] if group_labels else None
+    if st.session_state.menu_state in entry_names:
+        current_label = LABEL_BY_NAME[st.session_state.menu_state]
+    elif previous_selection in group_labels:
+        current_label = previous_selection
+    else:
+        current_label = group_labels[0] if group_labels else None
 
-        index = group_labels.index(current_label) if current_label in group_labels else 0
+    index = group_labels.index(current_label) if current_label in group_labels else 0
 
-        selected_label = st.sidebar.radio(
-            "Menü",
-            group_labels,
-            index=index,
-            label_visibility="collapsed",
-            key=radio_key
+    selected_label = st.sidebar.radio(
+        "Menü",
+        group_labels,
+        index=index,
+        label_visibility="collapsed",
+        key=radio_key
 
-         ) if group_labels else ""
+    ) if group_labels else ""
 
-        if (
-            previous_selection is not None
-            and selected_label != previous_selection
-            and selected_label in NAME_BY_LABEL
-        ):
-            st.session_state.menu_state = NAME_BY_LABEL[selected_label]
+    if selected_label and selected_label in NAME_BY_LABEL:
+        st.session_state.menu_state = NAME_BY_LABEL[selected_label]
+
 
 # 7) Kullanım: seçili menü adı
 
