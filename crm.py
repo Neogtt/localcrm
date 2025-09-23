@@ -2075,6 +2075,7 @@ elif menu == "Tahsilat Planı":
         bugun = acik[acik["Kalan Gün"] == 0]
         gecikmis = acik[acik["Kalan Gün"] < 0]
 
+        c1, c2, c3 = st.columns(3)
         c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Tutar_num'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
         c2.metric("Bugün Vadesi",   f"{float(bugun['Tutar_num'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
         c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Tutar_num'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
