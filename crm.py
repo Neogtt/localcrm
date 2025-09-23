@@ -206,19 +206,31 @@ def _normalize_hex(color):
     return f"#{raw.upper()}"
 
 
-def _mix_with_white(color, ratio):
+def _mix_with_base(color, ratio, base="#000000"):
     normalized = _normalize_hex(color)
     if normalized is None:
         normalized = DEFAULT_MENU_COLORS[0]
+
+    base_normalized = _normalize_hex(base) or "#000000"
+    
     ratio = max(0.0, min(1.0, float(ratio)))
+    
     raw = normalized.lstrip("#")
+    base_raw = base_normalized.lstrip("#")
+    
     r = int(raw[0:2], 16)
     g = int(raw[2:4], 16)
     b = int(raw[4:6], 16)
-    r = round(r + (255 - r) * ratio)
-    g = round(g + (255 - g) * ratio)
-    b = round(b + (255 - b) * ratio)
+
     return f"#{r:02X}{g:02X}{b:02X}"
+
+    base_r = int(base_raw[0:2], 16)
+    base_g = int(base_raw[2:4], 16)
+    base_b = int(base_raw[4:6], 16)
+
+    r = round(r + (base_r - r) * ratio)
+    g = round(g + (base_g - g) * ratio)
+    b = round(b + (base_b - b) * ratio)
 
 
 def _hex_to_rgba(color, alpha):
@@ -290,13 +302,13 @@ def build_sidebar_menu_css(menu_groups):
         '    align-items: center;',
         '    gap: 8px;',
         '    border: 1px solid rgba(9, 45, 27, 0.08);',
-        '    background: linear-gradient(135deg, #F4FFF7, #F6FFF8);',
+        '    background: linear-gradient(135deg, #111111, #000000);',
         '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);',
         '    transition: background .2s ease, border .2s ease, box-shadow .2s ease;',
         '}',
         'div[data-testid="stSidebar"] .stRadio label > div span {',
         '    font-weight: 600;',
-        '    color: #0B2412;',
+        '    color: #F5F5F5;',
         '}',
         'div[data-testid="stSidebar"] .stRadio label > div:hover {',
         '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);',
@@ -316,15 +328,15 @@ def build_sidebar_menu_css(menu_groups):
     for group_index, group in enumerate(menu_groups, start=1):
         for entry_index, entry in enumerate(group.get("entries", []), start=1):
             primary, secondary = entry["colors"]
-            base_from = _mix_with_white(primary, tint_levels["base"])
-            base_to = _mix_with_white(secondary, tint_levels["base"])
-            hover_from = _mix_with_white(primary, tint_levels["hover"])
-            hover_to = _mix_with_white(secondary, tint_levels["hover"])
-            active_from = _mix_with_white(primary, tint_levels["active"])
-            active_to = _mix_with_white(secondary, tint_levels["active"])
-            border_base = _mix_with_white(primary, border_levels["base"])
-            border_hover = _mix_with_white(primary, border_levels["hover"])
-            border_active = _mix_with_white(primary, border_levels["active"])
+            base_from = _mix_with_base(primary, tint_levels["base"])
+            base_to = _mix_with_base(secondary, tint_levels["base"])
+            hover_from = _mix_with_base(primary, tint_levels["hover"])
+            hover_to = _mix_with_base(secondary, tint_levels["hover"])
+            active_from = _mix_with_base(primary, tint_levels["active"])
+            active_to = _mix_with_base(secondary, tint_levels["active"])
+            border_base = _mix_with_base(primary, border_levels["base"])
+            border_hover = _mix_with_base(primary, border_levels["hover"])
+            border_active = _mix_with_base(primary, border_levels["active"])
             focus_ring = _hex_to_rgba(primary, 0.35)
             selector = (
                 f'div[data-testid="stSidebar"] .stRadio:nth-of-type({group_index}) '
@@ -348,7 +360,7 @@ def build_sidebar_menu_css(menu_groups):
                 '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 12px rgba(5, 20, 12, 0.16);',
                 '}',
                 f'{selector} > input:checked + div span {{',
-                '    color: #02140A;',
+                '    color: #FFFFFF;',
                 '}',
                 '',
             ])
