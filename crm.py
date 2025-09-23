@@ -189,99 +189,107 @@ def update_excel():
 
 # ========= ŞIK SIDEBAR MENÜ (RADIO + ANINDA STATE) =========
 
-# 1) Menü tanımı (ikonlar)
-menuler = [
-    ("Özet Ekran", "📊"),
-    ("Cari Ekleme", "🧑‍💼"),
-    ("Müşteri Listesi", "📒"),
-    ("Görüşme / Arama / Ziyaret Kayıtları", "☎️"),
-    ("Fiyat Teklifleri", "💰"),
-    ("Proforma Takibi", "📄"),
-    ("Güncel Sipariş Durumu", "🚚"),
-    ("Fatura & İhracat Evrakları", "📑"),
-    ("Vade Takibi", "⏰"),
-    ("ETA Takibi", "🛳️"),
-    ("Fuar Müşteri Kayıtları", "🎫"),
-    ("Medya Çekmecesi", "🗂️"),
-    ("Satış Performansı", "📈"),
-]
+# 1) Menü grupları
+MENU_GROUPS = [
+    ("Yönetim", ["Genel Bakış", "Satış Analitiği"]),
+    ("Müşteri & Satış", ["Yeni Cari Kaydı", "Müşteri Portföyü", "Etkileşim Günlüğü", "Teklif Yönetimi"]),
+    ("Operasyon", ["Proforma Yönetimi", "Sipariş Operasyonları", "ETA İzleme"]),
+    ("Finans", ["İhracat Evrakları", "Tahsilat Planı"]),
+    ("Arşiv", ["Fuar Kayıtları", "İçerik Arşivi"]),
 
 # 2) Tüm kullanıcılar için aynı menüler
-allowed_menus = menuler
+allowed_menus = [(group, name) for group, entries in MENU_GROUPS for name in entries]
 
 # 3) Etiketler ve haritalar
-labels = [f"{ikon} {isim}" for (isim, ikon) in allowed_menus]
-name_by_label = {f"{ikon} {isim}": isim for (isim, ikon) in allowed_menus}
-label_by_name = {isim: f"{ikon} {isim}" for (isim, ikon) in allowed_menus}
+llabels = []
+name_by_label = {}
+label_by_name = {}
+group_by_name = {}
+for group, name in allowed_menus:
+    label = f"{group} · {name}"
+    labels.append(label)
+    name_by_label[label] = name
+    label_by_name[name] = label
+    group_by_name[name] = group
 
 # 4) Varsayılan state
-if "menu_state" not in st.session_state:
-    st.session_state.menu_state = allowed_menus[0][0]
 
-# 5) CSS (kart görünümü; input gizlenmiyor—erişilebilir kalır)
+if "menu_state" not in st.session_state:
+    st.session_state.menu_state = allowed_menus[0][1]
+elif st.session_state.menu_state not in label_by_name:
+    st.session_state.menu_state = allowed_menus[0][1]
+
+# 5) CSS (kurumsal görünümlü kartlar)
 st.sidebar.markdown("""
 <style>
 section[data-testid="stSidebar"] { padding-top: .5rem; }
-div[data-testid="stSidebar"] .stRadio > div { gap: 10px !important; }
+.sidebar-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin: 18px 0 6px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+div[data-testid="stSidebar"] .stRadio > div { gap: 6px !important; }
 div[data-testid="stSidebar"] .stRadio label {
     border-radius: 12px;
-    padding: 12px 14px;
-    margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.12);
+    padding: 10px 12px;
+    margin-bottom: 2px;
+    border: 1px solid rgba(255,255,255,0.15);
     display: flex; align-items: center;
-    transition: transform .06s ease, filter .15s ease;
-    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    background: rgba(33, 154, 65, 0.08);
+    transition: background .15s ease, border .15s ease;
 }
-div[data-testid="stSidebar"] .stRadio label span { font-weight: 700; color: #fff; }
-div[data-testid="stSidebar"] .stRadio label:hover { filter: brightness(1.08); transform: translateY(-1px); }
-div[data-testid="stSidebar"] .stRadio [aria-checked="true"] { outline: 2px solid rgba(255,255,255,0.25); }
 
-/* Kart arka planları (sıra) */
-div[data-testid="stSidebar"] .stRadio label:nth-child(1)  { background: linear-gradient(90deg,#1D976C,#93F9B9); }  /* Özet */
-div[data-testid="stSidebar"] .stRadio label:nth-child(2)  { background: linear-gradient(90deg,#43cea2,#185a9d); }  /* Cari */
-div[data-testid="stSidebar"] .stRadio label:nth-child(3)  { background: linear-gradient(90deg,#ffb347,#ffcc33); }  /* Müşteri */
-div[data-testid="stSidebar"] .stRadio label:nth-child(4)  { background: linear-gradient(90deg,#ff5e62,#ff9966); }  /* Görüşme */
-div[data-testid="stSidebar"] .stRadio label:nth-child(5)  { background: linear-gradient(90deg,#8e54e9,#4776e6); }  /* Teklif */
-div[data-testid="stSidebar"] .stRadio label:nth-child(6)  { background: linear-gradient(90deg,#11998e,#38ef7d); }  /* Proforma */
-div[data-testid="stSidebar"] .stRadio label:nth-child(7)  { background: linear-gradient(90deg,#f7971e,#ffd200); }  /* Sipariş */
-div[data-testid="stSidebar"] .stRadio label:nth-child(8)  { background: linear-gradient(90deg,#f953c6,#b91d73); }  /* Evrak */
-div[data-testid="stSidebar"] .stRadio label:nth-child(9)  { background: linear-gradient(90deg,#43e97b,#38f9d7); }  /* Vade */
-div[data-testid="stSidebar"] .stRadio label:nth-child(10) { background: linear-gradient(90deg,#f857a6,#ff5858); }  /* ETA */
-div[data-testid="stSidebar"] .stRadio label:nth-child(11) { background: linear-gradient(90deg,#8e54e9,#bd4de6); }  /* Fuar */
-div[data-testid="stSidebar"] .stRadio label:nth-child(12) { background: linear-gradient(90deg,#4b79a1,#283e51); }  /* Medya */
-div[data-testid="stSidebar"] .stRadio label:nth-child(13) { background: linear-gradient(90deg,#2b5876,#4e4376); }  /* Satış Perf. */
+div[data-testid="stSidebar"] .stRadio label span { font-weight: 600; color: #ffffff; }
+div[data-testid="stSidebar"] .stRadio label:hover { background: rgba(33, 154, 65, 0.18); }
+div[data-testid="stSidebar"] .stRadio [aria-checked="true"] {
+    border: 1px solid #219A41;
+    background: rgba(33, 154, 65, 0.32);
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# 6) Callback: seçilince anında state yaz (tek tıkta geçiş)
-def _on_menu_change():
-    sel_label = st.session_state.menu_radio_label
-    st.session_state.menu_state = name_by_label.get(sel_label, allowed_menus[0][0])
+# 6) Menü seçimleri
+for group, entries in MENU_GROUPS:
+    st.sidebar.markdown(f"<div class='sidebar-section-title'>{group}</div>", unsafe_allow_html=True)
+    group_labels = [label_by_name[name] for name in entries]
+    radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group).lower()}"
+    previous_selection = st.session_state.get(radio_key)
 
-# 7) Radio’yu mevcut state’e göre başlat
-current_label = label_by_name.get(st.session_state.menu_state, labels[0])
-current_index = labels.index(current_label) if current_label in labels else 0
+    if st.session_state.menu_state in entries:
+        current_label = label_by_name[st.session_state.menu_state]
+    elif previous_selection in group_labels:
+        current_label = previous_selection
+    else:
+        current_label = group_labels[0]
 
-st.sidebar.radio(
-    "Menü",
-    labels,
-    index=current_index,
-    label_visibility="collapsed",
-    key="menu_radio_label",
-    on_change=_on_menu_change
-)
+    selected_label = st.sidebar.radio(
+        "Menü",
+        group_labels,
+        index=group_labels.index(current_label),
+        label_visibility="collapsed",
+        key=radio_key
+    )
+    
+    if previous_selection is not None and selected_label != previous_selection:
+        st.session_state.menu_state = name_by_label[selected_label]
 
-# 8) Kullanım: seçili menü adı
+# 7) Kullanım: seçili menü adı
+
 menu = st.session_state.menu_state
 # ========= /ŞIK MENÜ =========
 
 
 ### ===========================
-### === ÖZET MENÜ (Vade Durumu Dahil) ===
+### === GENEL BAKIŞ (Vade Durumu Dahil) ===
 ### ===========================
 
-if menu == "Özet Ekran":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Özet Ekran</h2>", unsafe_allow_html=True)
+if menu == "Genel Bakış":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Genel Bakış</h2>", unsafe_allow_html=True)
 
     # ---------- Güvenli tutar dönüştürücü ----------
     def smart_to_num(x):
@@ -308,7 +316,7 @@ if menu == "Özet Ekran":
         df_evrak = df_evrak.copy()
         df_evrak["Tutar_num"] = df_evrak["Tutar"].apply(smart_to_num).fillna(0.0)
         toplam_fatura_tutar = float(df_evrak["Tutar_num"].sum())
-    st.markdown(f"<div style='font-size:1.5em; color:#d35400; font-weight:bold;'>💵 Toplam Fatura Tutarı: {toplam_fatura_tutar:,.2f} USD</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:1.5em; color:#d35400; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura_tutar:,.2f} USD</div>", unsafe_allow_html=True)
 
     # ---------- Vade Durumu Kutucukları ----------
     for col in ["Vade Tarihi", "Ödendi"]:
@@ -328,40 +336,40 @@ if menu == "Özet Ekran":
     gec_sum = float(df_evrak.loc[gecikmis_m, "Tutar_num"].sum())
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("📅 Vadesi Gelmemiş", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
-    c2.metric("⚠️ Bugün Vadesi Dolan", f"{tb_sum:,.2f} USD", f"{int(vadesi_bugun_m.sum())} Fatura")
-    c3.metric("⛔ Gecikmiş", f"{gec_sum:,.2f} USD", f"{int(gecikmis_m.sum())} Fatura")
+    c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
+    c2.metric("Bugün Vadesi Dolan", f"{tb_sum:,.2f} USD", f"{int(vadesi_bugun_m.sum())} Fatura")
+    c3.metric("Geciken Ödemeler", f"{gec_sum:,.2f} USD", f"{int(gecikmis_m.sum())} Fatura")
 
     st.markdown("---")
 
     # ---- Bekleyen Teklifler ----
-    st.markdown("### 💰 Bekleyen Teklifler")
+     st.markdown("### Bekleyen Teklifler")
     bekleyen_teklifler = df_teklif[df_teklif["Durum"] == "Açık"] if "Durum" in df_teklif.columns else pd.DataFrame()
     try:
         toplam_teklif = pd.to_numeric(bekleyen_teklifler["Tutar"], errors="coerce").sum()
     except:
         toplam_teklif = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#11998e; font-weight:bold;'>Toplam: {toplam_teklif:,.2f} $</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:1.3em; color:#11998e; font-weight:bold;'>Toplam: {toplam_teklif:,.2f} USD</div>", unsafe_allow_html=True)
     if bekleyen_teklifler.empty:
         st.info("Bekleyen teklif yok.")
     else:
         st.dataframe(bekleyen_teklifler[["Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama"]], use_container_width=True)
 
     # ---- Bekleyen Proformalar ----
-    st.markdown("### 📄 Bekleyen Proformalar")
+    st.markdown("### Bekleyen Proformalar")
     bekleyen_proformalar = df_proforma[df_proforma["Durum"] == "Beklemede"] if "Durum" in df_proforma.columns else pd.DataFrame()
     try:
         toplam_proforma = pd.to_numeric(bekleyen_proformalar["Tutar"], errors="coerce").sum()
     except:
         toplam_proforma = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#f7971e; font-weight:bold;'>Toplam: {toplam_proforma:,.2f} $</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:1.3em; color:#f7971e; font-weight:bold;'>Toplam: {toplam_proforma:,.2f} USD</div>", unsafe_allow_html=True)
     if bekleyen_proformalar.empty:
         st.info("Bekleyen proforma yok.")
     else:
         st.dataframe(bekleyen_proformalar[["Müşteri Adı", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
 
     # ---- Sevk Bekleyen Siparişler ----
-    st.markdown("### 🚚 Siparişe Dönüşen (Sevk Bekleyen) Siparişler")
+    st.markdown("### Sevk Bekleyen Siparişler")
     if "Sevk Durumu" not in df_proforma.columns:
         df_proforma["Sevk Durumu"] = ""
     if "Ülke" not in df_proforma.columns:
@@ -371,27 +379,27 @@ if menu == "Özet Ekran":
         toplam_siparis = pd.to_numeric(sevk_bekleyenler["Tutar"], errors="coerce").sum()
     except:
         toplam_siparis = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>Toplam: {toplam_siparis:,.2f} $</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>Toplam: {toplam_siparis:,.2f} USD</div>", unsafe_allow_html=True)
     if sevk_bekleyenler.empty:
         st.info("Sevk bekleyen sipariş yok.")
     else:
         st.dataframe(sevk_bekleyenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
 
     # ---- Yolda Olan Siparişler ----
-    st.markdown("### ⏳ Yolda Olan (ETA Takibi) Siparişler")
+    st.markdown("### ETA Takibindeki Siparişler")
     eta_yolda = df_proforma[(df_proforma["Sevk Durumu"] == "Sevkedildi") & (~df_proforma["Sevk Durumu"].isin(["Ulaşıldı"]))] if "Sevk Durumu" in df_proforma.columns else pd.DataFrame()
     try:
         toplam_eta = pd.to_numeric(eta_yolda["Tutar"], errors="coerce").sum()
     except:
         toplam_eta = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Toplam: {toplam_eta:,.2f} $</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Toplam: {toplam_eta:,.2f} USD</div>", unsafe_allow_html=True)
     if eta_yolda.empty:
         st.info("Yolda olan (sevk edilmiş) sipariş yok.")
     else:
         st.dataframe(eta_yolda[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
 
     # ---- Son Teslim Edilen Siparişler ----
-    st.markdown("### ✅ Son Teslim Edilen (Ulaşıldı) 5 Sipariş")
+    st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
         teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"]
         if not teslim_edilenler.empty:
@@ -403,7 +411,7 @@ if menu == "Özet Ekran":
         st.info("Teslim edilmiş sipariş yok.")
 
     # ---- Vade Takibi Tablosu (HERKES GÖRÜR) ----
-    st.markdown("### 💸 Vadeli Fatura ve Tahsilat Takibi")
+    st.markdown("### Vadeli Fatura ve Tahsilat Takibi")
     for col in ["Proforma No", "Vade (gün)", "Ödendi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli"]:
         if col not in df_evrak.columns:
             df_evrak[col] = "" if col != "Ödendi" else False
@@ -425,7 +433,7 @@ if menu == "Özet Ekran":
 ### === CARİ EKLEME MENÜSÜ ===
 ### ===========================
 
-if menu == "Cari Ekleme":
+if menu == "Yeni Cari Kaydı":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Yeni Müşteri Ekle</h2>", unsafe_allow_html=True)
 
     # ---- Yardımcılar: doğrulama & normalizasyon ----
@@ -571,13 +579,13 @@ if mask_id_bos.any():
     df_musteri.loc[mask_id_bos, "ID"] = [str(uuid.uuid4()) for _ in range(mask_id_bos.sum())]
     update_excel()
 
-if menu == "Müşteri Listesi":
+if menu == "Müşteri Portföyü":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Müşteri Listesi</h2>", unsafe_allow_html=True)
 
     # ---- Üst Araçlar: Arama + Filtreler ----
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.2, 1.2, 1.2])
-        aranacak = c1.text_input("🔎 Arama (Ad / Telefon / E-posta / Adres)", value="")
+        aranacak = c1.text_input("Arama (Ad / Telefon / E-posta / Adres)", value="")
         ulke_filtre = c2.multiselect("Ülke Filtresi", sorted([u for u in df_musteri["Ülke"].dropna().unique() if str(u).strip()]), default=[])
         temsilci_filtre = c3.multiselect("Temsilci Filtresi", sorted([t for t in df_musteri["Satış Temsilcisi"].dropna().unique() if str(t).strip()]), default=[])
         durum_filtre = c4.multiselect("Durum", ["Aktif", "Pasif"], default=["Aktif"])  # Varsayılan: Aktif
@@ -623,7 +631,7 @@ if menu == "Müşteri Listesi":
         st.markdown(f"<div style='color:#219A41; font-weight:700;'>Toplam Kayıt: {len(view_df)}</div>", unsafe_allow_html=True)
     with top_row[1]:
         st.download_button(
-            "⬇️ CSV indir",
+            "CSV indir",
             data=table_df.to_csv(index=False).encode("utf-8"),
             file_name="musteri_listesi.csv",
             mime="text/csv",
@@ -737,7 +745,7 @@ if menu == "Müşteri Listesi":
 
 
 ### ===========================
-### === GÖRÜŞME / ARAMA / ZİYARET KAYITLARI MENÜSÜ (Cloud-Sağlam) ===
+### === ETKİLEŞİM GÜNLÜĞÜ (Cloud-Sağlam) ===
 ### ===========================
 
 import uuid
@@ -754,9 +762,9 @@ if mask_bos_id.any():
     df_kayit.loc[mask_bos_id, "ID"] = [str(uuid.uuid4()) for _ in range(mask_bos_id.sum())]
     update_excel()
 
-if menu == "Görüşme / Arama / Ziyaret Kayıtları":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Görüşme / Arama / Ziyaret Kayıtları</h2>", unsafe_allow_html=True)
-
+if menu == "Etkileşim Günlüğü":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Etkileşim Günlüğü</h2>", unsafe_allow_html=True)
+    
     st.subheader("Kayıt Ekranı")
     secim = st.radio("Lütfen işlem seçin:", ["Yeni Kayıt", "Eski Kayıt", "Tarih Aralığı ile Kayıtlar"], horizontal=False)
 
@@ -795,7 +803,7 @@ if menu == "Görüşme / Arama / Ziyaret Kayıtları":
         colf1, colf2, colf3 = st.columns([2, 1, 1])
         musteri_f = colf1.selectbox("Müşteri Filtresi", ["(Hepsi)"] + sorted(df_kayit["Müşteri Adı"].dropna().unique().tolist()))
         tip_f = colf2.multiselect("Tip Filtresi", ["Arama", "Görüşme", "Ziyaret"], default=[])
-        aranacak = colf3.text_input("🔎 Ara (açıklama)", value="")
+        aranacak = colf3.text_input("Ara (açıklama)", value="")
 
         view = df_kayit.copy()
         # Filtreler
@@ -815,7 +823,7 @@ if menu == "Görüşme / Arama / Ziyaret Kayıtları":
 
             # Dışa aktar
             st.download_button(
-                "⬇️ CSV indir",
+                "CSV indir",
                 data=goster.to_csv(index=False).encode("utf-8"),
                 file_name="gorusme_kayitlari.csv",
                 mime="text/csv"
@@ -889,7 +897,7 @@ if menu == "Görüşme / Arama / Ziyaret Kayıtları":
             goster["Tarih"] = pd.to_datetime(goster["Tarih"], errors="coerce").dt.strftime('%d/%m/%Y')
             st.dataframe(goster.sort_values("Tarih", ascending=False), use_container_width=True)
             st.download_button(
-                "⬇️ CSV indir",
+                "CSV indir",
                 data=goster.to_csv(index=False).encode("utf-8"),
                 file_name="gorusme_kayitlari_tarih_araligi.csv",
                 mime="text/csv"
@@ -899,13 +907,13 @@ if menu == "Görüşme / Arama / Ziyaret Kayıtları":
 
 
 ### ===========================
-### --- FİYAT TEKLİFLERİ MENÜSÜ (Cloud-Sağlam) ---
+### --- TEKLİF YÖNETİMİ (Cloud-Sağlam) ---
 ### ===========================
 
-elif menu == "Fiyat Teklifleri":
+elif menu == "Teklif Yönetimi":
     import uuid, time
 
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Fiyat Teklifleri</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Teklif Yönetimi</h2>", unsafe_allow_html=True)
 
     # --- Zorunlu kolonlar + ID backfill ---
     gerekli = ["ID", "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"]
@@ -961,7 +969,7 @@ elif menu == "Fiyat Teklifleri":
     acik_teklif_sayi = len(acik_teklifler)
     st.subheader("Açık Pozisyondaki Teklifler")
     st.markdown(
-        f"<div style='font-size:1.05em; color:#11998e; font-weight:bold;'>Toplam: {toplam_teklif:,.2f} $ | "
+        f"<div style='font-size:1.05em; color:#11998e; font-weight:bold;'>Toplam: {toplam_teklif:,.2f} USD | "
         f"Toplam Açık Teklif: {acik_teklif_sayi} adet</div>",
         unsafe_allow_html=True
     )
@@ -994,7 +1002,7 @@ elif menu == "Fiyat Teklifleri":
             musteri_sec = st.selectbox("Müşteri Seç", musteri_list, key="yeni_teklif_musteri")
             tarih = st.date_input("Tarih", value=datetime.date.today(), format="DD/MM/YYYY")
             teklif_no = st.text_input("Teklif No", value=otomatik_teklif_no())
-            tutar = st.text_input("Tutar ($)")
+            tutar = st.text_input("Tutar (USD)")
             urun = st.text_input("Ürün/Hizmet")
             aciklama = st.text_area("Açıklama")
             durum = st.selectbox("Durum", ["Açık", "Sonuçlandı", "Beklemede"])
@@ -1053,7 +1061,7 @@ elif menu == "Fiyat Teklifleri":
         max_dt = (tmp.max().date() if tmp.notna().any() else datetime.date.today())
         d1 = f3.date_input("Başlangıç", value=min_dt)
         d2 = f4.date_input("Bitiş", value=max_dt)
-        aranacak = st.text_input("🔎 Ara (ürün/açıklama/teklif no)")
+        aranacak = st.text_input("Ara (ürün/açıklama/teklif no)")
 
         view = df_teklif.copy()
         view["Tarih"] = pd.to_datetime(view["Tarih"], errors="coerce")
@@ -1084,7 +1092,7 @@ elif menu == "Fiyat Teklifleri":
             tablo["Tarih"] = tablo["Tarih"].dt.strftime("%d/%m/%Y")
             st.dataframe(tablo[["Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Durum", "Ürün/Hizmet", "Açıklama"]], use_container_width=True)
             st.download_button(
-                "⬇️ CSV indir",
+                "CSV indir",
                 data=tablo.to_csv(index=False).encode("utf-8"),
                 file_name="teklifler.csv",
                 mime="text/csv"
@@ -1126,7 +1134,7 @@ elif menu == "Fiyat Teklifleri":
                         [""] + sorted(df_musteri["Müşteri Adı"].dropna().unique().tolist()),
                         index=([""] + sorted(df_musteri["Müşteri Adı"].dropna().unique().tolist())).index(df_teklif.at[orj_idx, "Müşteri Adı"]) if df_teklif.at[orj_idx, "Müşteri Adı"] in ([""] + sorted(df_musteri["Müşteri Adı"].dropna().unique().tolist())) else 0
                     )
-                    tutar_g = st.text_input("Tutar ($)", value=str(df_teklif.at[orj_idx, "Tutar"]))
+                    tutar_g = st.text_input("Tutar (USD)", value=str(df_teklif.at[orj_idx, "Tutar"]))
                     urun_g = st.text_input("Ürün/Hizmet", value=str(df_teklif.at[orj_idx, "Ürün/Hizmet"]))
                     aciklama_g = st.text_area("Açıklama", value=str(df_teklif.at[orj_idx, "Açıklama"]))
                     durum_g = st.selectbox("Durum", ["Açık", "Beklemede", "Sonuçlandı"],
@@ -1177,10 +1185,10 @@ elif menu == "Fiyat Teklifleri":
 ### --- PROFORMA TAKİBİ MENÜSÜ (Cloud-Sağlam) ---
 ### ===========================
 
-elif menu == "Proforma Takibi":
+elif menu == "Proforma Yönetimi":
     import uuid, tempfile, time
 
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Proforma Takibi</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Proforma Yönetimi</h2>", unsafe_allow_html=True)
 
     # ---- Drive klasör ID'leri (üstten tanımlıysa onları, yoksa EVRAK_KLASOR_ID'yi kullan) ----
     PROFORMA_PDF_FOLDER_ID   = globals().get("PROFORMA_PDF_FOLDER_ID", globals().get("EVRAK_KLASOR_ID"))
@@ -1254,7 +1262,7 @@ elif menu == "Proforma Takibi":
             with st.form("add_proforma"):
                 tarih      = st.date_input("Tarih", value=datetime.date.today())
                 proforma_no= st.text_input("Proforma No")
-                tutar      = st.text_input("Tutar ($)")
+                tutar      = st.text_input("Tutar (USD)")
                 vade_gun   = st.text_input("Vade (gün)")
                 ulke       = st.text_input("Ülke", value=default_ulke, disabled=True)
                 temsilci   = st.text_input("Satış Temsilcisi", value=default_temsilci, disabled=True)
@@ -1339,7 +1347,7 @@ elif menu == "Proforma Takibi":
                     with st.form("edit_proforma"):
                         tarih_      = st.date_input("Tarih", value=(pd.to_datetime(kayit["Tarih"], errors="coerce").date() if pd.notna(pd.to_datetime(kayit["Tarih"], errors="coerce")) else datetime.date.today()))
                         proforma_no_= st.text_input("Proforma No", value=str(kayit["Proforma No"]))
-                        tutar_      = st.text_input("Tutar ($)", value=str(kayit["Tutar"]))
+                        tutar_      = st.text_input("Tutar (USD)", value=str(kayit["Tutar"]))
                         vade_gun_   = st.text_input("Vade (gün)", value=str(kayit["Vade (gün)"]))
                         aciklama_   = st.text_area("Açıklama", value=str(kayit["Açıklama"]))
                         durum_      = st.selectbox("Durum", ["Beklemede","Siparişe Dönüştü","İptal","Faturası Kesildi"],
@@ -1410,10 +1418,10 @@ elif menu == "Proforma Takibi":
 
 
 ### ===========================
-### --- GÜNCEL SİPARİŞ DURUMU (ID tabanlı) ---
+### --- SİPARİŞ OPERASYONLARI (ID tabanlı) ---
 ### ===========================
 
-elif menu == "Güncel Sipariş Durumu":
+elif menu == "Sipariş Operasyonları":
     import uuid
 
     st.header("Güncel Sipariş Durumu")
@@ -1473,14 +1481,14 @@ elif menu == "Güncel Sipariş Durumu":
         st.rerun()
 
     # ================= Sevk Et (ETA’ya gönder) =================
-    st.markdown("#### Siparişi Sevk Et (ETA Takibine Gönder)")
+    st.markdown("#### Siparişi Sevk Et (ETA İzleme Kaydına Gönder)")
     sec_id_sevk = st.selectbox(
         "Sevk Edilecek Sipariş",
         options=siparisler["ID"].tolist(),
         format_func=lambda _id: f"{siparisler.loc[siparisler['ID']==_id, 'Müşteri Adı'].values[0]} - {siparisler.loc[siparisler['ID']==_id, 'Proforma No'].values[0]}",
         key="sevk_sec"
     )
-    if st.button("Sevkedildi → ETA'ya Ekle"):
+    if st.button("Sevkedildi → ETA İzlemeye Ekle"):
         # Proforma'dan bilgiler
         row = df_proforma.loc[df_proforma["ID"] == sec_id_sevk].iloc[0]
         # ETA kolon güvenliği
@@ -1545,15 +1553,14 @@ elif menu == "Güncel Sipariş Durumu":
         return 0.0
 
     toplam = float(siparisler["Tutar"].apply(smart_to_num).sum())
-    st.markdown(f"<div style='color:#219A41; font-weight:bold;'>*Toplam Bekleyen Sevk: {toplam:,.2f} $*</div>", unsafe_allow_html=True)
-
+    st.markdown(f"<div style='color:#219A41; font-weight:bold;'>*Toplam Bekleyen Sevk: {toplam:,.2f} USD*</div>", unsafe_allow_html=True)
 
 ### ===========================
-### --- FATURA & İHRACAT EVRAKLARI MENÜSÜ ---
+### --- İHRACAT EVRAKLARI MENÜSÜ ---
 ### ===========================
 
-elif menu == "Fatura & İhracat Evrakları":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Fatura & İhracat Evrakları</h2>", unsafe_allow_html=True)
+elif menu == "İhracat Evrakları":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
 
     for col in [
         "Proforma No", "Vade (gün)", "Vade Tarihi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli",
@@ -1601,7 +1608,7 @@ elif menu == "Fatura & İhracat Evrakları":
     with st.form("add_evrak"):
         fatura_no = st.text_input("Fatura No")
         fatura_tarih = st.date_input("Fatura Tarihi", value=datetime.date.today())
-        tutar = st.text_input("Fatura Tutarı ($)")
+        tutar = st.text_input("Fatura Tutarı (USD)")
         vade_gun = ""
         vade_tarihi = ""
         if secilen_musteri and proforma_no_sec:
@@ -1681,13 +1688,13 @@ elif menu == "Fatura & İhracat Evrakları":
                 st.rerun()
 
 ### ===========================
-### --- FATURA & İHRACAT EVRAKLARI MENÜSÜ (ID + tekilleştirme) ---
+### --- İHRACAT EVRAKLARI MENÜSÜ (ID + tekilleştirme) ---
 ### ===========================
 
-elif menu == "Fatura & İhracat Evrakları":
+elif menu == "İhracat Evrakları":
     import uuid, tempfile
 
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Fatura & İhracat Evrakları</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
 
     # ---- Sütun güvenliği + benzersiz ID ----
     gerekli_kolonlar = [
@@ -1765,7 +1772,7 @@ elif menu == "Fatura & İhracat Evrakları":
     with st.form("add_evrak"):
         fatura_no = st.text_input("Fatura No")
         fatura_tarih = st.date_input("Fatura Tarihi", value=datetime.date.today())
-        tutar = st.text_input("Fatura Tutarı ($)")
+        tutar = st.text_input("Fatura Tutarı (USD)")
         # Vade (gün) & vade tarihi gösterimi
         st.text_input("Vade (gün)", value=str(vade_gun), key="vade_gun", disabled=True)
 
@@ -1854,10 +1861,11 @@ elif menu == "Fatura & İhracat Evrakları":
 
 
 ### ===========================
-### --- VADE TAKİBİ MENÜSÜ ---
+### --- TAHSİLAT PLANI MENÜSÜ ---
 ### ===========================
-elif menu == "Vade Takibi":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Vade Takibi</h2>", unsafe_allow_html=True)
+
+elif menu == "Tahsilat Planı":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Tahsilat Planı</h2>", unsafe_allow_html=True)
 
     # Gerekli kolonlar yoksa ekle
     for c in ["Müşteri Adı","Fatura No","Vade Tarihi","Tutar_num","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
@@ -1881,10 +1889,9 @@ elif menu == "Vade Takibi":
         bugun = acik[acik["Kalan Gün"] == 0]
         gecikmis = acik[acik["Kalan Gün"] < 0]
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("📅 Vadesi Gelmemiş", f"{float(vadesi_gelmemis['Tutar_num'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
-        c2.metric("⚠️ Bugün Vadesi",   f"{float(bugun['Tutar_num'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
-        c3.metric("⛔ Gecikmiş",        f"{float(gecikmis['Tutar_num'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
+        c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Tutar_num'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
+        c2.metric("Bugün Vadesi",   f"{float(bugun['Tutar_num'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
+        c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Tutar_num'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
 
         st.markdown("---")
 
@@ -1933,10 +1940,11 @@ elif menu == "Vade Takibi":
                 st.rerun()
 
 ### ===========================
-### --- ETA TAKİBİ MENÜSÜ ---
+### --- ETA İZLEME MENÜSÜ ---
 ### ===========================
-elif menu == "ETA Takibi":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ETA Takibi</h2>", unsafe_allow_html=True)
+
+elif menu == "ETA İzleme":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ETA İzleme</h2>", unsafe_allow_html=True)
 
     import re, tempfile
 
@@ -2053,7 +2061,7 @@ elif menu == "ETA Takibi":
         klasor_tarih = resolve_folder_date(sec_musteri, sec_proforma)
 
         # ========== YÜKLEME FOTOĞRAFLARI (Müşteri_Adi + Tarih → “Yükleme Resimleri”) ==========
-        st.markdown("#### 🖼️ Yükleme Fotoğrafları (Müşteri + Tarih bazlı)")
+        st.markdown("#### Yükleme Fotoğrafları (Müşteri + Tarih bazlı)")
 
         hedef_klasor = get_loading_photos_folder(sec_musteri, klasor_tarih)
         if not hedef_klasor:
@@ -2061,10 +2069,10 @@ elif menu == "ETA Takibi":
         else:
             # 1) Klasörü yeni sekmede aç butonu
             drive_link = f"https://drive.google.com/drive/folders/{hedef_klasor}?usp=sharing"
-            st.markdown(f"[🔗 Klasörü yeni sekmede aç]({drive_link})")
+            st.markdown(f"[Klasörü yeni sekmede aç]({drive_link})")
 
             # 2) Panel içinde gömülü görüntüleme – sadece gezinme
-            with st.expander(f"📂 Panelde klasörü görüntüle – {sec_musteri} / {klasor_tarih.strftime('%Y-%m-%d')}"):
+            with st.expander(f"Panelde klasörü görüntüle – {sec_musteri} / {klasor_tarih.strftime('%Y-%m-%d')}"):
                 embed = f"https://drive.google.com/embeddedfolderview?id={hedef_klasor}#grid"
                 st.markdown(
                     f'<iframe src="{embed}" width="100%" height="520" frameborder="0" '
@@ -2089,7 +2097,7 @@ elif menu == "ETA Takibi":
                     st.write("…")
 
             # 4) (OPSİYONEL) Dosya Ekle – duplike önleme (aynı isim SKIP)
-            with st.expander("➕ Dosya Ekle (opsiyonel, duplike önleme)"):
+            with st.expander("Dosya Ekle (opsiyonel, duplike önleme)"):
                 files = st.file_uploader(
                     "Yüklenecek dosyaları seçin",
                     type=["pdf", "jpg", "jpeg", "png", "webp"],
@@ -2189,13 +2197,13 @@ elif menu == "ETA Takibi":
                 st.rerun()
 
             if geri_al:
-                # Siparişi geri al: ETA'dan çıkar, proforma'da sevk durumunu boş yap (Güncel Sipariş Durumu'na döner)
+                # Siparişi geri al: ETA'dan çıkar, proforma'da sevk durumunu boş yap (Sipariş Operasyonları'na döner)
                 df_eta = df_eta[~((df_eta["Müşteri Adı"] == sec_musteri) & (df_eta["Proforma No"] == sec_proforma))]
                 idx = df_proforma[(df_proforma["Müşteri Adı"] == sec_musteri) & (df_proforma["Proforma No"] == sec_proforma)].index
                 if len(idx) > 0:
                     df_proforma.at[idx[0], "Sevk Durumu"] = ""
                 update_excel()
-                st.success("Sevkiyat geri alındı! Sipariş tekrar Güncel Sipariş Durumu'na gönderildi.")
+                st.success("Sevkiyat geri alındı! Sipariş tekrar Sipariş Operasyonları'na gönderildi.")
                 st.rerun()
 
     # ==== ETA TAKİP LİSTESİ ====
@@ -2314,7 +2322,7 @@ elif menu == "ETA Takibi":
  
 
 # ==============================
-# FUAR MÜŞTERİ KAYITLARI MENÜSÜ
+# FUAR KAYITLARI MENÜSÜ
 # ==============================
 
 # Gerekli kolonlar (eksikse ekle)
@@ -2326,8 +2334,8 @@ for c in FUAR_KOLONLAR:
     if c not in df_fuar_musteri.columns:
         df_fuar_musteri[c] = "" if c not in ["Görüşme Kalitesi", "Tarih"] else np.nan
 
-if menu == "Fuar Müşteri Kayıtları":
-    st.markdown("<h2 style='color:#8e54e9; font-weight:bold; text-align:center;'>🎫 FUAR MÜŞTERİ KAYITLARI</h2>", unsafe_allow_html=True)
+if menu == "Fuar Kayıtları":
+    st.markdown("<h2 style='color:#8e54e9; font-weight:bold; text-align:center;'>Fuar Kayıtları</h2>", unsafe_allow_html=True)
     st.info("Fuarlarda müşteri görüşmelerinizi hızlıca buraya ekleyin. Yeni kayıt oluşturun, mevcutları düzenleyin.")
 
     # --- Fuar seçimi / oluşturma ---
@@ -2480,11 +2488,11 @@ if menu == "Fuar Müşteri Kayıtları":
                 ]], use_container_width=True)
 
 # ===========================
-# === MEDYA ÇEKMECESİ MENÜSÜ ===
+# === İÇERİK ARŞİVİ MENÜSÜ ===
 # ===========================
 
-elif menu == "Medya Çekmecesi":
-    st.markdown("<h2 style='color:#8e54e9; font-weight:bold;'>Medya Çekmecesi</h2>", unsafe_allow_html=True)
+elif menu == "İçerik Arşivi":
+    st.markdown("<h2 style='color:#8e54e9; font-weight:bold;'>İçerik Arşivi</h2>", unsafe_allow_html=True)
     st.info("Google Drive’daki medya, ürün görselleri ve kalite evraklarına aşağıdaki sekmelerden ulaşabilirsiniz.")
 
     # --- Klasör ID'leri (kolayca değiştirilebilir) ---
@@ -2518,7 +2526,7 @@ elif menu == "Medya Çekmecesi":
             )
             col_a, col_b = st.columns([1, 2])
             with col_a:
-                st.link_button("🔗 Klasörü yeni sekmede aç", open_url(fid))
+                st.link_button("Klasörü yeni sekmede aç", open_url(fid))
             with col_b:
                 st.info("Dosya/klasörlere çift tıklayarak yeni sekmede açabilir veya indirebilirsiniz.")
 
@@ -2526,11 +2534,11 @@ elif menu == "Medya Çekmecesi":
 
 
 ### ===========================
-### --- SATIŞ PERFORMANSI MENÜSÜ ---
+### --- SATIŞ ANALİTİĞİ MENÜSÜ ---
 ### ===========================
 
-elif menu == "Satış Performansı":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Satış Performansı</h2>", unsafe_allow_html=True)
+elif menu == "Satış Analitiği":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Satış Analitiği</h2>", unsafe_allow_html=True)
 
     # --- Akıllı sayı dönüştürücü ---
     def smart_to_num(x):
@@ -2563,12 +2571,11 @@ elif menu == "Satış Performansı":
 
     # ---- Toplamlar ----
     toplam_fatura = float(df_evrak["Tutar_num"].sum())
-    st.markdown(f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>💵 Toplam Fatura Tutarı: {toplam_fatura:,.2f} USD</div>", unsafe_allow_html=True)
-
+        st.markdown(f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura:,.2f} USD</div>", unsafe_allow_html=True)
     # ---- Tarih aralığı filtresi (Timestamp ile) ----
     min_ts = df_evrak[date_col].min()
     max_ts = df_evrak[date_col].max()
-    d1, d2 = st.date_input("📅 Tarih Aralığı", value=(min_ts.date(), max_ts.date()))
+    d1, d2 = st.date_input("Tarih Aralığı", value=(min_ts.date(), max_ts.date()))
 
     start_ts = pd.to_datetime(d1)  # 00:00
     end_ts   = pd.to_datetime(d2) + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)  # gün sonu
@@ -2577,8 +2584,7 @@ elif menu == "Satış Performansı":
     df_range = df_evrak[mask]
 
     aralik_toplam = float(df_range["Tutar_num"].sum())
-    st.markdown(f"<div style='font-size:1.2em; color:#f7971e; font-weight:bold;'>📊 {d1} - {d2} Arası Toplam: {aralik_toplam:,.2f} USD</div>", unsafe_allow_html=True)
-
+     st.markdown(f"<div style='font-size:1.2em; color:#f7971e; font-weight:bold;'>{d1} - {d2} Arası Toplam: {aralik_toplam:,.2f} USD</div>", unsafe_allow_html=True)
     # ---- Detay tablo ----
     show_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
     show_cols = [c for c in show_cols if c in df_range.columns]
