@@ -428,14 +428,20 @@ for group in MENU_GROUPS:
     group_labels = [entry["label"] for entry in entries]
     entry_names = [entry["name"] for entry in entries]
     radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group_title).lower()}"
+    last_selection_key = f"{radio_key}_previous"
     previous_selection = st.session_state.get(radio_key)
+    last_rendered_selection = st.session_state.get(last_selection_key)
 
-    if st.session_state.menu_state in entry_names:
-        current_label = LABEL_BY_NAME[st.session_state.menu_state]
-    elif previous_selection in group_labels:
+    if previous_selection in group_labels:
         current_label = previous_selection
+    elif st.session_state.menu_state in entry_names:
+        current_label = LABEL_BY_NAME[st.session_state.menu_state]
     else:
         current_label = group_labels[0] if group_labels else None
+
+    if current_label is not None:
+        st.session_state[radio_key] = current_label
+
 
     index = group_labels.index(current_label) if current_label in group_labels else 0
 
@@ -448,8 +454,15 @@ for group in MENU_GROUPS:
 
     ) if group_labels else ""
 
-    if selected_label and selected_label in NAME_BY_LABEL:
+    if (
+        selected_label
+        and last_rendered_selection is not None
+        and selected_label != last_rendered_selection
+        and selected_label in NAME_BY_LABEL
+     ):
         st.session_state.menu_state = NAME_BY_LABEL[selected_label]
+    if group_labels:
+        st.session_state[last_selection_key] = selected_label
 
 
 # 7) Kullanım: seçili menü adı
