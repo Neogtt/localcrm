@@ -189,100 +189,264 @@ def update_excel():
 
 # ========= ŞIK SIDEBAR MENÜ (RADIO + ANINDA STATE) =========
 
-# 1) Menü grupları
+
+
+
+
+# 1) Menü grupları ve metadata
+DEFAULT_MENU_COLORS = ("#1D976C", "#93F9B9")
+
+
+def _normalize_hex(color):
+    if not isinstance(color, str):
+        return None
+    raw = color.strip().lstrip("#")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+        return None
+    return f"#{raw.upper()}"
+
+
+def _mix_with_white(color, ratio):
+    normalized = _normalize_hex(color)
+    if normalized is None:
+        normalized = DEFAULT_MENU_COLORS[0]
+    ratio = max(0.0, min(1.0, float(ratio)))
+    raw = normalized.lstrip("#")
+    r = int(raw[0:2], 16)
+    g = int(raw[2:4], 16)
+    b = int(raw[4:6], 16)
+    r = round(r + (255 - r) * ratio)
+    g = round(g + (255 - g) * ratio)
+    b = round(b + (255 - b) * ratio)
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def _hex_to_rgba(color, alpha):
+    normalized = _normalize_hex(color)
+    if normalized is None:
+        normalized = DEFAULT_MENU_COLORS[0]
+    alpha = max(0.0, min(1.0, float(alpha)))
+    raw = normalized.lstrip("#")
+    r = int(raw[0:2], 16)
+    g = int(raw[2:4], 16)
+    b = int(raw[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _prepare_menu_groups(menu_groups):
+    entries = []
+    name_by_label = {}
+    label_by_name = {}
+    for group in menu_groups:
+        processed = []
+        for entry in group.get("entries", []):
+            base_colors = entry.get("colors") or DEFAULT_MENU_COLORS
+            if not isinstance(base_colors, (list, tuple)) or len(base_colors) != 2:
+                base_colors = DEFAULT_MENU_COLORS
+            c1 = _normalize_hex(base_colors[0]) or DEFAULT_MENU_COLORS[0]
+            c2 = _normalize_hex(base_colors[1]) or DEFAULT_MENU_COLORS[1]
+            icon = entry.get("icon", "")
+            label = entry.get("label") or f"{icon} {entry['name']}".strip()
+            metadata = {
+                "group": group["group"],
+                "name": entry["name"],
+                "icon": icon,
+                "label": label,
+                "colors": (c1, c2),
+            }
+            processed.append(metadata)
+            entries.append(metadata)
+            name_by_label[metadata["label"]] = metadata["name"]
+            label_by_name[metadata["name"]] = metadata["label"]
+        group["entries"] = processed
+    return entries, name_by_label, label_by_name
+
+
+def build_sidebar_menu_css(menu_groups):
+    css = [
+        '<style>',
+        'section[data-testid="stSidebar"] { padding-top: .5rem; }',
+        '.sidebar-section-title {',
+        '    font-size: 0.85rem;',
+        '    font-weight: 700;',
+        '    letter-spacing: 0.04em;',
+        '    margin: 18px 0 6px;',
+        '    text-transform: uppercase;',
+        '    color: rgba(255, 255, 255, 0.65);',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio > div { gap: 6px !important; }',
+        'div[data-testid="stSidebar"] .stRadio label { cursor: pointer; display: block; }',
+        'div[data-testid="stSidebar"] .stRadio label > input {',
+        '    position: absolute;',
+        '    opacity: 0;',
+        '    pointer-events: none;',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio label > div {',
+        '    position: relative;',
+        '    border-radius: 12px;',
+        '    padding: 10px 12px;',
+        '    margin-bottom: 4px;',
+        '    display: flex;',
+        '    align-items: center;',
+        '    gap: 8px;',
+        '    border: 1px solid rgba(9, 45, 27, 0.08);',
+        '    background: linear-gradient(135deg, #F4FFF7, #F6FFF8);',
+        '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);',
+        '    transition: background .2s ease, border .2s ease, box-shadow .2s ease;',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio label > div span {',
+        '    font-weight: 600;',
+        '    color: #0B2412;',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio label > div:hover {',
+        '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio label > input:focus-visible + div {',
+        '    outline: none;',
+        '}',
+        'div[data-testid="stSidebar"] .stRadio label > input:checked + div span {',
+        '    font-weight: 700;',
+        '}',
+        '',
+    ]
+
+    tint_levels = {"base": 0.8, "hover": 0.65, "active": 0.5}
+    border_levels = {"base": 0.72, "hover": 0.6, "active": 0.45}
+
+    for group_index, group in enumerate(menu_groups, start=1):
+        for entry_index, entry in enumerate(group.get("entries", []), start=1):
+            primary, secondary = entry["colors"]
+            base_from = _mix_with_white(primary, tint_levels["base"])
+            base_to = _mix_with_white(secondary, tint_levels["base"])
+            hover_from = _mix_with_white(primary, tint_levels["hover"])
+            hover_to = _mix_with_white(secondary, tint_levels["hover"])
+            active_from = _mix_with_white(primary, tint_levels["active"])
+            active_to = _mix_with_white(secondary, tint_levels["active"])
+            border_base = _mix_with_white(primary, border_levels["base"])
+            border_hover = _mix_with_white(primary, border_levels["hover"])
+            border_active = _mix_with_white(primary, border_levels["active"])
+            focus_ring = _hex_to_rgba(primary, 0.35)
+            selector = (
+                f'div[data-testid="stSidebar"] .stRadio:nth-of-type({group_index}) '
+                f'label:nth-of-type({entry_index})'
+            )
+            css.extend([
+                f'{selector} > div {{',
+                f'    background: linear-gradient(135deg, {base_from}, {base_to});',
+                f'    border-color: {border_base};',
+                '}',
+                f'{selector} > div:hover {{',
+                f'    background: linear-gradient(135deg, {hover_from}, {hover_to});',
+                f'    border-color: {border_hover};',
+                '}',
+                f'{selector} > input:focus-visible + div {{',
+                f'    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 4px {focus_ring};',
+                '}',
+                f'{selector} > input:checked + div {{',
+                f'    background: linear-gradient(135deg, {active_from}, {active_to});',
+                f'    border-color: {border_active};',
+                '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 12px rgba(5, 20, 12, 0.16);',
+                '}',
+                f'{selector} > input:checked + div span {{',
+                '    color: #02140A;',
+                '}',
+                '',
+            ])
+
+    css.append('</style>')
+    return "\n".join(css)
+
+
 MENU_GROUPS = [
-    ("Yönetim", ["Genel Bakış", "Satış Analitiği"]),
-    ("Müşteri & Satış", ["Yeni Cari Kaydı", "Müşteri Portföyü", "Etkileşim Günlüğü", "Teklif Yönetimi"]),
-    ("Operasyon", ["Proforma Yönetimi", "Sipariş Operasyonları", "ETA İzleme"]),
-    ("Finans", ["İhracat Evrakları", "Tahsilat Planı"]),
-    ("Arşiv", ["Fuar Kayıtları", "İçerik Arşivi"]),
+    {
+        "group": "Yönetim",
+        "entries": [
+            {"name": "Genel Bakış", "icon": "📊", "label": "📊 Genel Bakış", "colors": ("#1D976C", "#93F9B9")},
+            {"name": "Satış Analitiği", "icon": "📈", "label": "📈 Satış Analitiği", "colors": ("#0F2027", "#2C5364")},
+        ],
+    },
+    {
+        "group": "Müşteri & Satış",
+        "entries": [
+            {"name": "Yeni Cari Kaydı", "icon": "➕", "label": "➕ Yeni Cari Kaydı", "colors": ("#F7971E", "#FFD200")},
+            {"name": "Müşteri Portföyü", "icon": "👥", "label": "👥 Müşteri Portföyü", "colors": ("#36D1DC", "#5B86E5")},
+            {"name": "Etkileşim Günlüğü", "icon": "📝", "label": "📝 Etkileşim Günlüğü", "colors": ("#EB5757", "#F2994A")},
+            {"name": "Teklif Yönetimi", "icon": "📄", "label": "📄 Teklif Yönetimi", "colors": ("#56AB2F", "#A8E063")},
+        ],
+    },
+    {
+        "group": "Operasyon",
+        "entries": [
+            {"name": "Proforma Yönetimi", "icon": "🧾", "label": "🧾 Proforma Yönetimi", "colors": ("#8E54E9", "#4776E6")},
+            {"name": "Sipariş Operasyonları", "icon": "🚚", "label": "🚚 Sipariş Operasyonları", "colors": ("#00B4DB", "#0083B0")},
+            {"name": "ETA İzleme", "icon": "⏱️", "label": "⏱️ ETA İzleme", "colors": ("#24C6DC", "#514A9D")},
+        ],
+    },
+    {
+        "group": "Finans",
+        "entries": [
+            {"name": "İhracat Evrakları", "icon": "📦", "label": "📦 İhracat Evrakları", "colors": ("#C02425", "#F0CB35")},
+            {"name": "Tahsilat Planı", "icon": "💰", "label": "💰 Tahsilat Planı", "colors": ("#0F3443", "#34E89E")},
+        ],
+    },
+    {
+        "group": "Arşiv",
+        "entries": [
+            {"name": "Fuar Kayıtları", "icon": "🎪", "label": "🎪 Fuar Kayıtları", "colors": ("#FF512F", "#DD2476")},
+            {"name": "İçerik Arşivi", "icon": "🗂️", "label": "🗂️ İçerik Arşivi", "colors": ("#2F80ED", "#56CCF2")},
+        ],
+    },
+]
 
-# 2) Tüm kullanıcılar için aynı menüler
-allowed_menus = [(group, name) for group, entries in MENU_GROUPS for name in entries]
+MENU_ENTRIES, NAME_BY_LABEL, LABEL_BY_NAME = _prepare_menu_groups(MENU_GROUPS)
 
-# 3) Etiketler ve haritalar
-llabels = []
-name_by_label = {}
-label_by_name = {}
-group_by_name = {}
-for group, name in allowed_menus:
-    label = f"{group} · {name}"
-    labels.append(label)
-    name_by_label[label] = name
-    label_by_name[name] = label
-    group_by_name[name] = group
+if not MENU_ENTRIES:
+    st.stop()
 
-# 4) Varsayılan state
+default_menu_name = MENU_ENTRIES[0]["name"]
 
-if "menu_state" not in st.session_state:
-    st.session_state.menu_state = allowed_menus[0][1]
-elif st.session_state.menu_state not in label_by_name:
-    st.session_state.menu_state = allowed_menus[0][1]
+if "menu_state" not in st.session_state or st.session_state.menu_state not in LABEL_BY_NAME:
+    st.session_state.menu_state = default_menu_name
+    st.sidebar.markdown(build_sidebar_menu_css(MENU_GROUPS), unsafe_allow_html=True)
 
-# 5) CSS (kurumsal görünümlü kartlar)
-st.sidebar.markdown("""
-<style>
-section[data-testid="stSidebar"] { padding-top: .5rem; }
-.sidebar-section-title {
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    margin: 18px 0 6px;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.65);
-}
-
-div[data-testid="stSidebar"] .stRadio > div { gap: 6px !important; }
-div[data-testid="stSidebar"] .stRadio label {
-    border-radius: 12px;
-    padding: 10px 12px;
-    margin-bottom: 2px;
-    border: 1px solid rgba(255,255,255,0.15);
-    display: flex; align-items: center;
-    background: rgba(33, 154, 65, 0.08);
-    transition: background .15s ease, border .15s ease;
-}
-
-div[data-testid="stSidebar"] .stRadio label span { font-weight: 600; color: #ffffff; }
-div[data-testid="stSidebar"] .stRadio label:hover { background: rgba(33, 154, 65, 0.18); }
-div[data-testid="stSidebar"] .stRadio [aria-checked="true"] {
-    border: 1px solid #219A41;
-    background: rgba(33, 154, 65, 0.32);
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# 6) Menü seçimleri
-for group, entries in MENU_GROUPS:
-    st.sidebar.markdown(f"<div class='sidebar-section-title'>{group}</div>", unsafe_allow_html=True)
-    group_labels = [label_by_name[name] for name in entries]
-    radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group).lower()}"
+    for group in MENU_GROUPS:
+    group_title = group["group"]
+    entries = group.get("entries", [])
+    st.sidebar.markdown(f"<div class='sidebar-section-title'>{group_title}</div>", unsafe_allow_html=True)
+    group_labels = [entry["label"] for entry in entries]
+    entry_names = [entry["name"] for entry in entries]
+    radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group_title).lower()}"
     previous_selection = st.session_state.get(radio_key)
-
-    if st.session_state.menu_state in entries:
-        current_label = label_by_name[st.session_state.menu_state]
+    
+    if st.session_state.menu_state in entry_names:
+        current_label = LABEL_BY_NAME[st.session_state.menu_state]
     elif previous_selection in group_labels:
         current_label = previous_selection
     else:
-        current_label = group_labels[0]
+        current_label = group_labels[0] if group_labels else None
+
+    index = group_labels.index(current_label) if current_label in group_labels else 0
 
     selected_label = st.sidebar.radio(
         "Menü",
         group_labels,
-        index=group_labels.index(current_label),
+        index=index,
         label_visibility="collapsed",
         key=radio_key
-    )
-    
-    if previous_selection is not None and selected_label != previous_selection:
-        st.session_state.menu_state = name_by_label[selected_label]
+
+     ) if group_labels else ""
+
+    if (
+        previous_selection is not None
+        and selected_label != previous_selection
+        and selected_label in NAME_BY_LABEL
+    ):
+        st.session_state.menu_state = NAME_BY_LABEL[selected_label]
 
 # 7) Kullanım: seçili menü adı
 
 menu = st.session_state.menu_state
 # ========= /ŞIK MENÜ =========
-
 
 ### ===========================
 ### === GENEL BAKIŞ (Vade Durumu Dahil) ===
@@ -343,7 +507,7 @@ if menu == "Genel Bakış":
     st.markdown("---")
 
     # ---- Bekleyen Teklifler ----
-     st.markdown("### Bekleyen Teklifler")
+    st.markdown("### Bekleyen Teklifler")
     bekleyen_teklifler = df_teklif[df_teklif["Durum"] == "Açık"] if "Durum" in df_teklif.columns else pd.DataFrame()
     try:
         toplam_teklif = pd.to_numeric(bekleyen_teklifler["Tutar"], errors="coerce").sum()
@@ -2571,7 +2735,10 @@ elif menu == "Satış Analitiği":
 
     # ---- Toplamlar ----
     toplam_fatura = float(df_evrak["Tutar_num"].sum())
-        st.markdown(f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura:,.2f} USD</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='font-size:1.3em; color:#185a9d; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura:,.2f} USD</div>",
+        unsafe_allow_html=True,
+    )
     # ---- Tarih aralığı filtresi (Timestamp ile) ----
     min_ts = df_evrak[date_col].min()
     max_ts = df_evrak[date_col].max()
