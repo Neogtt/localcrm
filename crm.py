@@ -1569,10 +1569,21 @@ elif menu == "Sipariş Operasyonları":
     g["Termin Tarihi"] = pd.to_datetime(g["Termin Tarihi"], errors="coerce").dt.strftime("%d/%m/%Y")
 
     st.markdown("<h4 style='color:#219A41; font-weight:bold;'>Tüm Siparişe Dönüşenler</h4>", unsafe_allow_html=True)
-    st.dataframe(
-        g[["Tarih","Müşteri Adı","Termin Tarihi","Ülke","Satış Temsilcisi","Ödeme Şekli","Proforma No","Tutar","Açıklama"]],
-        use_container_width=True
-    )
+    goruntulenecek_kolonlar = [
+        "Tarih",
+        "Müşteri Adı",
+        "Termin Tarihi",
+        "Ülke",
+        "Satış Temsilcisi",
+        "Ödeme Şekli",
+        "Proforma No",
+        "Tutar",
+        "Açıklama",
+    ]
+    g_tab = g[goruntulenecek_kolonlar].reset_index(drop=True)
+    g_tab.index = g_tab.index + 1
+    g_tab.index.name = "Sıra"
+    st.dataframe(g_tab, use_container_width=True)
 
     # ================= Termin Tarihi Güncelle =================
     st.markdown("#### Termin Tarihi Güncelle")
