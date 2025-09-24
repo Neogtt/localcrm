@@ -2,12 +2,50 @@ import streamlit as st
 import pandas as pd
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
-import io, os, datetime, tempfile, re, json
+import io, os, datetime, tempfile, re, json, time, uuid
 import numpy as np
 import smtplib
 from email.message import EmailMessage
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
+
+CURRENCY_SYMBOLS = ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]
+
+
+def smart_to_num(value):
+    if pd.isna(value):
+        return 0.0
+
+    sanitized = str(value).strip()
+    for symbol in CURRENCY_SYMBOLS:
+        sanitized = sanitized.replace(symbol, "")
+
+    sanitized = sanitized.replace("\u00A0", "").replace(" ", "")
+
+    try:
+        return float(sanitized)
+    except Exception:
+        pass
+
+    if "," in sanitized:
+        try:
+            return float(sanitized.replace(".", "").replace(",", "."))
+        except Exception:
+            pass
+
+    return 0.0
+
+
+def güvenli_sil(path, tekrar=5, bekle=1):
+    for _ in range(tekrar):
+        try:
+            os.remove(path)
+            return True
+        except PermissionError:
+            time.sleep(bekle)
+        except FileNotFoundError:
+            return True
+    return False
 
 # ==== KULLANICI GİRİŞİ SİSTEMİ ====
 USERS = {
@@ -401,24 +439,7 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
 if menu == "Genel Bakış":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Genel Bakış</h2>", unsafe_allow_html=True)
 
-    # ---------- Güvenli tutar dönüştürücü ----------
-    def smart_to_num(x):
-        if pd.isna(x): 
-            return 0.0
-        s = str(x).strip()
-        for sym in ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]:
-            s = s.replace(sym, "")
-        s = s.replace("\u00A0", "").replace(" ", "")
-        try:
-            return float(s)
-        except:
-            pass
-        if "," in s:
-            try:
-                return float(s.replace(".", "").replace(",", "."))
-            except:
-                pass
-        return 0.0
+    
 
     # ---------- Toplam Fatura ----------
     toplam_fatura_tutar = 0.0
@@ -663,9 +684,6 @@ if menu == "Yeni Cari Kaydı":
 ### === MÜŞTERİ LİSTESİ MENÜSÜ (Cloud-Sağlam) ===
 ### ===========================
 
-import uuid
-import numpy as np  # Eksik bilgi mesajı için gerekli
-
 # — Zorunlu sütunları garanti altına al —
 gerekli_kolonlar = [
     "ID", "Müşteri Adı", "Telefon", "E-posta", "Adres",
@@ -860,8 +878,6 @@ if menu == "Müşteri Portföyü":
 ### === ETKİLEŞİM GÜNLÜĞÜ (Cloud-Sağlam) ===
 ### ===========================
 
-import uuid
-
 # Zorunlu kolonlar
 gerekli = ["ID", "Müşteri Adı", "Tarih", "Tip", "Açıklama"]
 for c in gerekli:
@@ -1023,7 +1039,6 @@ if menu == "Etkileşim Günlüğü":
 ### ===========================
 
 elif menu == "Teklif Yönetimi":
-    import uuid, time
 
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Teklif Yönetimi</h2>", unsafe_allow_html=True)
 
@@ -1037,20 +1052,6 @@ elif menu == "Teklif Yönetimi":
         df_teklif.loc[mask_bos_id, "ID"] = [str(uuid.uuid4()) for _ in range(mask_bos_id.sum())]
         update_excel()
 
-    # --- Akıllı sayı dönüştürücü ---
-    def smart_to_num(x):
-        if pd.isna(x): return 0.0
-        s = str(x).strip()
-        for sym in ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]:
-            s = s.replace(sym, "")
-        s = s.replace("\u00A0", "").replace(" ", "")
-        try: return float(s)                     # US format
-        except: pass
-        if "," in s:
-            try: return float(s.replace(".", "").replace(",", "."))  # EU format
-            except: pass
-        return 0.0
-
     # --- Otomatik teklif no ---
     def otomatik_teklif_no():
         if df_teklif.empty or "Teklif No" not in df_teklif.columns:
@@ -1061,17 +1062,6 @@ elif menu == "Teklif Yönetimi":
         yeni_no = (sayilar.max() + 1) if not sayilar.empty else 1
         return f"TKF-{yeni_no:04d}"
 
-    # --- Güvenli geçici dosya sil ---
-    def güvenli_sil(dosya, tekrar=5, bekle=1):
-        for _ in range(tekrar):
-            try:
-                os.remove(dosya)
-                return True
-            except PermissionError:
-                time.sleep(bekle)
-            except FileNotFoundError:
-                return True
-        return False
 
     # ---------- ÜST ÖZET: Açık teklifler ----------
     tkg = df_teklif.copy()
@@ -1298,7 +1288,6 @@ elif menu == "Teklif Yönetimi":
 ### ===========================
 
 elif menu == "Proforma Yönetimi":
-    import uuid, tempfile, time
 
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Proforma Yönetimi</h2>", unsafe_allow_html=True)
 
@@ -1381,30 +1370,67 @@ def render_siparis_formu_yukleme(df, hedef_id):
             st.rerun()
 
         update_excel()
+   
+    def render_siparis_formu_yukleme(df, hedef_id):
+        if not hedef_id:
+            return
+hedef_mask = df["ID"] == hedef_id
+        if not hedef_mask.any():
+            st.session_state.convert_proforma_id = None
+            return
 
-# --- Akıllı sayı dönüştürücü (toplamlar için) ---
-    def smart_to_num(x):
-        if pd.isna(x): return 0.0
-        s = str(x).strip()
-        for sym in ["USD","$","€","EUR","₺","TL","tl","Tl"]: s = s.replace(sym,"")
-        s = s.replace("\u00A0","").replace(" ","")
-        try: return float(s)
-        except: pass
-        if "," in s:
-            try: return float(s.replace(".","").replace(",","."))
-            except: pass
-        return 0.0
+        hedef_idx = df.index[hedef_mask][0]
+        hedef_kayit = df.loc[hedef_idx]
 
-    # --- Güvenli silme ---
-    def güvenli_sil(path, tekrar=5, bekle=1):
-        for _ in range(tekrar):
-            try:
-                os.remove(path); return True
-            except PermissionError:
-                time.sleep(bekle)
-            except FileNotFoundError:
-                return True
-        return False
+        st.markdown("#### Siparişe Dönüştürme - Sipariş Formu Yükle")
+        st.info(
+            f"{hedef_kayit['Müşteri Adı']} - {hedef_kayit['Proforma No']} için sipariş formunu yükleyin."
+        )
+
+        form_key = f"siparis_formu_upload_{hedef_id}"
+        with st.form(form_key):
+            siparis_formu_file = st.file_uploader(
+                "Sipariş Formu PDF", type="pdf", key=f"sf_{hedef_id}"
+            )
+            col_sf1, col_sf2 = st.columns(2)
+            kaydet_sf = col_sf1.form_submit_button("Sipariş Formunu Kaydet ve Dönüştür")
+            vazgec_sf = col_sf2.form_submit_button("Vazgeç")
+
+        if kaydet_sf:
+            if siparis_formu_file is None:
+                st.error("Sipariş formu yüklenmeli.")
+                return
+
+            sf_name = (
+                f"{hedef_kayit['Müşteri Adı']}_{hedef_kayit['Proforma No']}_SiparisFormu_"
+                f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            )
+            tmp = os.path.join(".", sf_name)
+            with open(tmp, "wb") as f:
+                f.write(siparis_formu_file.read())
+
+            gfile = drive.CreateFile({'title': sf_name, 'parents': [{'id': SIPARIS_FORMU_FOLDER_ID}]})
+            gfile.SetContentFile(tmp)
+            gfile.Upload()
+            sf_url = f"https://drive.google.com/file/d/{gfile['id']}/view?usp=sharing"
+            güvenli_sil(tmp)
+
+            df.at[hedef_idx, "Sipariş Formu"] = sf_url
+            df.at[hedef_idx, "Durum"] = "Siparişe Dönüştü"
+            df.at[hedef_idx, "Sevk Durumu"] = ""
+            st.session_state.convert_proforma_id = None
+            update_excel()
+            st.success(
+                "Sipariş formu kaydedildi ve durum 'Siparişe Dönüştü' olarak güncellendi!"
+            )
+            st.rerun()
+
+        elif vazgec_sf:
+            st.session_state.convert_proforma_id = None
+            st.info("Siparişe dönüştürme işlemi iptal edildi.")
+            st.rerun()
+
+        update_excel()
 
     # ---------- ÜST ÖZET: Bekleyen Proformalar ----------
     pview = df_proforma.copy()
@@ -1716,17 +1742,6 @@ elif menu == "Sipariş Operasyonları":
             st.markdown(" - " + " | ".join(links), unsafe_allow_html=True)
 
     # Toplam bekleyen sevk tutarı (akıllı parse)
-    def smart_to_num(x):
-        if pd.isna(x): return 0.0
-        s = str(x).strip()
-        for sym in ["USD","$","€","EUR","₺","TL","tl","Tl"]: s = s.replace(sym,"")
-        s = s.replace("\u00A0","").replace(" ","")
-        try: return float(s)
-        except: pass
-        if "," in s:
-            try: return float(s.replace(".","").replace(",","."))
-            except: pass
-        return 0.0
 
     toplam = float(siparisler["Tutar"].apply(smart_to_num).sum())
     st.markdown(f"<div style='color:#219A41; font-weight:bold;'>*Toplam Bekleyen Sevk: {toplam:,.2f} USD*</div>", unsafe_allow_html=True)
@@ -1868,7 +1883,6 @@ elif menu == "İhracat Evrakları":
 ### ===========================
 
 elif menu == "İhracat Evrakları":
-    import uuid, tempfile
 
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
 
@@ -2122,8 +2136,6 @@ elif menu == "Tahsilat Planı":
 
 elif menu == "ETA İzleme":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ETA İzleme</h2>", unsafe_allow_html=True)
-
-    import re, tempfile
 
     # ---- Sabitler ----
     ROOT_EXPORT_FOLDER_ID = "14FTE1oSeIeJ6Y_7C0oQyZPKC8dK8hr1J"  # İhracat Evrakları ana klasör ID (MY DRIVE)
@@ -2716,22 +2728,6 @@ elif menu == "İçerik Arşivi":
 
 elif menu == "Satış Analitiği":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Satış Analitiği</h2>", unsafe_allow_html=True)
-
-    # --- Akıllı sayı dönüştürücü ---
-    def smart_to_num(x):
-        if pd.isna(x): return 0.0
-        s = str(x).strip()
-        for sym in ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]:
-            s = s.replace(sym, "")
-        s = s.replace("\u00A0", "").replace(" ", "")
-        # 1) Doğrudan parse (US)
-        try: return float(s)
-        except: pass
-        # 2) Avrupa formatı
-        if "," in s:
-            try: return float(s.replace(".", "").replace(",", "."))
-            except: pass
-        return 0.0
 
     # ---- Kolon güvenliği ----
     if "Tutar" not in df_evrak.columns:
