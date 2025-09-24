@@ -1517,8 +1517,8 @@ elif menu == "Proforma Yönetimi":
                         st.success("Kayıt silindi!")
                         st.rerun()
 
-hedef_id = st.session_state.convert_proforma_id
-                    if hedef_id:
+                    hedef_id = st.session_state.convert_proforma_id
+                        if hedef_id:
                         hedef_mask = df_proforma["ID"] == hedef_id
                         if hedef_mask.any():
                             hedef_idx = df_proforma.index[hedef_mask][0]
