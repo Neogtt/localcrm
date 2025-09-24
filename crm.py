@@ -1304,7 +1304,7 @@ elif menu == "Proforma Yönetimi":
 
     if "convert_proforma_id" not in st.session_state:
         st.session_state.convert_proforma_id = None
-
+          
     # ---- Drive klasör ID'leri (üstten tanımlıysa onları, yoksa EVRAK_KLASOR_ID'yi kullan) ----
     PROFORMA_PDF_FOLDER_ID   = globals().get("PROFORMA_PDF_FOLDER_ID", globals().get("EVRAK_KLASOR_ID"))
     SIPARIS_FORMU_FOLDER_ID  = globals().get("SIPARIS_FORMU_FOLDER_ID", globals().get("EVRAK_KLASOR_ID"))
@@ -1320,7 +1320,69 @@ elif menu == "Proforma Yönetimi":
         df_proforma.loc[mask_bos_id, "ID"] = [str(uuid.uuid4()) for _ in range(mask_bos_id.sum())]
         update_excel()
 
-    # --- Akıllı sayı dönüştürücü (toplamlar için) ---
+def render_siparis_formu_yukleme(df, hedef_id):
+        if not hedef_id:
+            return
+
+        hedef_mask = df["ID"] == hedef_id
+        if not hedef_mask.any():
+            st.session_state.convert_proforma_id = None
+            return
+
+        hedef_idx = df.index[hedef_mask][0]
+        hedef_kayit = df.loc[hedef_idx]
+
+        st.markdown("#### Siparişe Dönüştürme - Sipariş Formu Yükle")
+        st.info(
+            f"{hedef_kayit['Müşteri Adı']} - {hedef_kayit['Proforma No']} için sipariş formunu yükleyin."
+        )
+
+        form_key = f"siparis_formu_upload_{hedef_id}"
+        with st.form(form_key):
+            siparis_formu_file = st.file_uploader(
+                "Sipariş Formu PDF", type="pdf", key=f"sf_{hedef_id}"
+            )
+            col_sf1, col_sf2 = st.columns(2)
+            kaydet_sf = col_sf1.form_submit_button("Sipariş Formunu Kaydet ve Dönüştür")
+            vazgec_sf = col_sf2.form_submit_button("Vazgeç")
+
+        if kaydet_sf:
+            if siparis_formu_file is None:
+                st.error("Sipariş formu yüklenmeli.")
+                return
+
+            sf_name = (
+                f"{hedef_kayit['Müşteri Adı']}_{hedef_kayit['Proforma No']}_SiparisFormu_"
+                f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            )
+            tmp = os.path.join(".", sf_name)
+            with open(tmp, "wb") as f:
+                f.write(siparis_formu_file.read())
+
+            gfile = drive.CreateFile({'title': sf_name, 'parents': [{'id': SIPARIS_FORMU_FOLDER_ID}]})
+            gfile.SetContentFile(tmp)
+            gfile.Upload()
+            sf_url = f"https://drive.google.com/file/d/{gfile['id']}/view?usp=sharing"
+            güvenli_sil(tmp)
+
+            df.at[hedef_idx, "Sipariş Formu"] = sf_url
+            df.at[hedef_idx, "Durum"] = "Siparişe Dönüştü"
+            df.at[hedef_idx, "Sevk Durumu"] = ""
+            st.session_state.convert_proforma_id = None
+            update_excel()
+            st.success(
+                "Sipariş formu kaydedildi ve durum 'Siparişe Dönüştü' olarak güncellendi!"
+            )
+            st.rerun()
+
+        elif vazgec_sf:
+            st.session_state.convert_proforma_id = None
+            st.info("Siparişe dönüştürme işlemi iptal edildi.")
+            st.rerun()
+
+        update_excel()
+
+# --- Akıllı sayı dönüştürücü (toplamlar için) ---
     def smart_to_num(x):
         if pd.isna(x): return 0.0
         s = str(x).strip()
@@ -1517,56 +1579,9 @@ elif menu == "Proforma Yönetimi":
                         st.success("Kayıt silindi!")
                         st.rerun()
 
-                    hedef_id = st.session_state.convert_proforma_id
-                        if hedef_id:
-                        hedef_mask = df_proforma["ID"] == hedef_id
-                        if hedef_mask.any():
-                            hedef_idx = df_proforma.index[hedef_mask][0]
-                            hedef_kayit = df_proforma.loc[hedef_idx]
-                            st.markdown("#### Siparişe Dönüştürme - Sipariş Formu Yükle")
-                            st.info(
-                                f"{hedef_kayit['Müşteri Adı']} - {hedef_kayit['Proforma No']} için sipariş formunu yükleyin.")
-                            with st.form(f"siparis_formu_upload_{hedef_id}"):
-                                siparis_formu_file = st.file_uploader(
-                                    "Sipariş Formu PDF", type="pdf", key=f"sf_{hedef_id}"
-                                )
-                                col_sf1, col_sf2 = st.columns(2)
-                                kaydet_sf = col_sf1.form_submit_button("Sipariş Formunu Kaydet ve Dönüştür")
-                                vazgec_sf = col_sf2.form_submit_button("Vazgeç")
+                    render_siparis_formu_yukleme(df_proforma, st.session_state.convert_proforma_id)
 
-                            if kaydet_sf:
-                                if siparis_formu_file is None:
-                                    st.error("Sipariş formu yüklenmeli.")
-                                else:
-                                    sf_name = (
-                                        f"{hedef_kayit['Müşteri Adı']}_{hedef_kayit['Proforma No']}_SiparisFormu_"
-                                        f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-                                    )
-                                    tmp = os.path.join(".", sf_name)
-                                    with open(tmp, "wb") as f:
-                                        f.write(siparis_formu_file.read())
-                                    gfile = drive.CreateFile({'title': sf_name, 'parents': [{'id': SIPARIS_FORMU_FOLDER_ID}]})
-                                    gfile.SetContentFile(tmp)
-                                    gfile.Upload()
-                                    sf_url = f"https://drive.google.com/file/d/{gfile['id']}/view?usp=sharing"
-                                    güvenli_sil(tmp)
-
-                                    df_proforma.at[hedef_idx, "Sipariş Formu"] = sf_url
-                                    df_proforma.at[hedef_idx, "Durum"] = "Siparişe Dönüştü"
-                                    df_proforma.at[hedef_idx, "Sevk Durumu"] = ""
-                                    st.session_state.convert_proforma_id = None
-                                    update_excel()
-                                    st.success(
-                                        "Sipariş formu kaydedildi ve durum 'Siparişe Dönüştü' olarak güncellendi!"
-                                    )
-                                    st.rerun()
-                            elif vazgec_sf:
-                                st.session_state.convert_proforma_id = None
-                                st.info("Siparişe dönüştürme işlemi iptal edildi.")
-                                st.rerun()
-                        else:
-                            st.session_state.convert_proforma_id = None
-
+                   
 ### ===========================
 ### --- SİPARİŞ OPERASYONLARI (ID tabanlı) ---
 ### ===========================
