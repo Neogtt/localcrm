@@ -76,56 +76,19 @@ EXCEL_FILE_ID    = "1C8OpNAIRySkWYTI9jBaboV-Rq85UbVD9"
 EVRAK_KLASOR_ID  = "14FTE1oSeIeJ6Y_7C0oQyZPKC8dK8hr1J"
 FIYAT_TEKLIFI_ID = "1TNjwx-xhmlxNRI3ggCJA7jaCAu9Lt_65"
 
-# --- Google Drive bağlantısı (Service Account + Streamlit secrets) ---
-@st.cache_resource
-def get_drive():
-    """
-    Streamlit Cloud'da: .streamlit/secrets.toml içinde [gcp_service_account] olmalı.
-    Lokalde: secrets yoksa otomatik LocalWebserverAuth'a düşer (tarayıcıda OAuth açar).
-    """
-    gauth = GoogleAuth()
 
-    try:
-        if "gcp_service_account" in st.secrets:
-            # Secrets içindeki JSON'u geçici dosyaya yaz
-            sa = dict(st.secrets["gcp_service_account"])
-            fd, tmp_path = tempfile.mkstemp(suffix=".json")
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(sa, f)
 
-            # PyDrive2'yi service account ile yetkilendir
-            gauth.settings.update({
-                "client_config_backend": "service",
-                "service_config": {"client_json_file_path": tmp_path}
-            })
-            gauth.ServiceAuth()
-        else:
-            # Lokal geliştirme için geri dönüş (OAuth flow)
-            gauth.LocalWebserverAuth()
-    except Exception as e:
-        st.error(f"Google Drive kimlik doğrulama hatası: {e}")
-        raise
+# --- LOGO (WEB LINKİNDEN AL) ---
+logo_url = "https://www.sekeroglugroup.com/storage/settings/xdp5r6DZIFJMNGOStqwvKCiVHDhYxA84jFr61TNp.svg"
 
-    return GoogleDrive(gauth)
-
-drive = get_drive()
-
-# --- Logo indir (yoksa) ---
-if not os.path.exists(LOGO_LOCAL_NAME):
-    try:
-        logo_file = drive.CreateFile({'id': LOGO_FILE_ID})
-        logo_file.GetContentFile(LOGO_LOCAL_NAME)
-    except Exception as e:
-        st.warning(f"Logo indirilemedi: {e}")
-
-# --- Üst başlık ---
 col1, col2 = st.columns([3, 7])
 with col1:
-    if os.path.exists(LOGO_LOCAL_NAME):
-        st.image(LOGO_LOCAL_NAME, width=300)
+    st.image(logo_url, width=300)
 with col2:
     st.markdown("""
-        <style>.block-container { padding-top: 0.2rem !important; }</style>
+        <style>
+        .block-container { padding-top: 0.2rem !important; }
+        </style>
         <div style="display:flex; flex-direction:column; align-items:flex-start; width:100%; margin-bottom:10px;">
             <h1 style="color: #219A41; font-weight: bold; font-size: 2.8em; letter-spacing:2px; margin:0; margin-top:-8px;">
                 ŞEKEROĞLU İHRACAT CRM
@@ -133,40 +96,93 @@ with col2:
         </div>
     """, unsafe_allow_html=True)
 
-# --- Excel'i Drive'dan çek ---
+
+
+@st.cache_resource
+def get_drive():
+    gauth = GoogleAuth()
+    gauth.LocalWebserverAuth()
+    return GoogleDrive(gauth)
+drive = get_drive()
+
 downloaded = drive.CreateFile({'id': EXCEL_FILE_ID})
-try:
-    downloaded.FetchMetadata(fetch_all=True)
-    downloaded.GetContentFile("temp.xlsx")
-except Exception as e:
-    st.error(f"CRM dosyası indirilemedi (EXCEL_FILE_ID yanlış olabilir ya da yetki yok): {e}")
+downloaded.FetchMetadata(fetch_all=True)
+downloaded.GetContentFile("temp.xlsx")
 
-# --- DataFrame’leri yükle (aynı sütun güvenliğiyle) ---
-def _read_sheet(name, cols=None):
+# --- Dataframe yükleme ---
+if os.path.exists("temp.xlsx"):
     try:
-        df = pd.read_excel("temp.xlsx", sheet_name=name) if os.path.exists("temp.xlsx") else pd.DataFrame()
-        if cols:
-            for c in cols:
-                if c not in df.columns:
-                    df[c] = ""
-        return df
+        df_musteri = pd.read_excel("temp.xlsx", sheet_name=0)
     except Exception:
-        return pd.DataFrame({c: [] for c in (cols or [])})
+        df_musteri = pd.DataFrame(columns=[
+            "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
+        ])
+    try:
+        df_kayit = pd.read_excel("temp.xlsx", sheet_name="Kayıtlar")
+    except Exception:
+        df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
+    try:
+        df_teklif = pd.read_excel("temp.xlsx", sheet_name="Teklifler")
+    except Exception:
+        df_teklif = pd.DataFrame(columns=[
+            "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
+        ])
+    try:
+        df_proforma = pd.read_excel("temp.xlsx", sheet_name="Proformalar")
+        for col in ["Proforma No", "Vade", "Sevk Durumu"]:
+            if col not in df_proforma.columns:
+                df_proforma[col] = ""
+    except Exception:
+        df_proforma = pd.DataFrame(columns=[
+            "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
+        ])
+    try:
+        df_evrak = pd.read_excel("temp.xlsx", sheet_name="Evraklar")
+        for col in ["Yük Resimleri", "EK Belgeler"]:
+            if col not in df_evrak.columns:
+                df_evrak[col] = ""
+    except Exception:
+        df_evrak = pd.DataFrame(columns=[
+            "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
+            "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+            "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
+            "Yük Resimleri", "EK Belgeler"
+        ])
+    try:
+        df_eta = pd.read_excel("temp.xlsx", sheet_name="ETA")
+    except Exception:
+        df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+    try:
+        df_fuar_musteri = pd.read_excel("temp.xlsx", sheet_name="FuarMusteri")
+    except Exception:
+        df_fuar_musteri = pd.DataFrame(columns=[
+            "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
+        ])
+else:
+    df_musteri = pd.DataFrame(columns=[
+        "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
+    ])
+    df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
+    df_teklif = pd.DataFrame(columns=[
+        "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
+    ])
+    df_proforma = pd.DataFrame(columns=[
+        "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
+    ])
+    df_evrak = pd.DataFrame(columns=[
+        "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
+        "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+        "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
+        "Yük Resimleri", "EK Belgeler"
+    ])
+    df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+    df_fuar_musteri = pd.DataFrame(columns=[
+        "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
+    ])
 
-df_musteri = _read_sheet(0, ["Müşteri Adı","Telefon","E-posta","Adres","Ülke","Satış Temsilcisi","Kategori","Durum","Vade (Gün)","Ödeme Şekli"])
-df_kayit   = _read_sheet("Kayıtlar", ["Müşteri Adı","Tarih","Tip","Açıklama"])
-df_teklif  = _read_sheet("Teklifler", ["Müşteri Adı","Tarih","Teklif No","Tutar","Ürün/Hizmet","Açıklama","Durum","PDF"])
-df_proforma= _read_sheet("Proformalar", ["Müşteri Adı","Tarih","Proforma No","Tutar","Açıklama","Durum","PDF","Sipariş Formu","Vade","Sevk Durumu"])
-df_evrak   = _read_sheet("Evraklar", ["Müşteri Adı","Fatura No","Fatura Tarihi","Vade Tarihi","Tutar",
-                                       "Commercial Invoice","Sağlık Sertifikası","Packing List","Konşimento","İhracat Beyannamesi",
-                                       "Fatura PDF","Sipariş Formu","Yük Resimleri","EK Belgeler"])
-df_eta     = _read_sheet("ETA", ["Müşteri Adı","Proforma No","ETA Tarihi","Açıklama"])
-df_fuar_musteri = _read_sheet("FuarMusteri", ["Fuar Adı","Müşteri Adı","Ülke","Telefon","E-mail","Açıklamalar","Tarih"])
-
-# --- Excel'i geri Drive’a yaz (tek fonksiyon) ---
 def update_excel():
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         df_musteri.to_excel(writer, sheet_name="Sayfa1", index=False)
         df_kayit.to_excel(writer, sheet_name="Kayıtlar", index=False)
         df_teklif.to_excel(writer, sheet_name="Teklifler", index=False)
@@ -175,300 +191,208 @@ def update_excel():
         df_eta.to_excel(writer, sheet_name="ETA", index=False)
         df_fuar_musteri.to_excel(writer, sheet_name="FuarMusteri", index=False)
     buffer.seek(0)
-
     with open("temp.xlsx", "wb") as f:
         f.write(buffer.read())
+    downloaded.SetContentFile("temp.xlsx")
+    downloaded.Upload()
 
+# ===========================
+# ==== GOOGLE SHEETS (MÜŞTERİ) SENKRON
+# ===========================
+def _df_to_values(df: pd.DataFrame):
+    def _cell(v):
+        if pd.isna(v): return ""
+        if isinstance(v, (pd.Timestamp, datetime.date, datetime.datetime)):
+            try: return pd.to_datetime(v).date().isoformat()
+            except: return str(v)
+        if isinstance(v, (np.bool_, bool)): return bool(v)
+        return v
+    header = list(df.columns)
+    rows = df.applymap(_cell).values.tolist()
+    return [header] + rows
+
+def write_customers_to_gsheet(df_customers: pd.DataFrame) -> bool:
+    if "sheets_svc" not in globals() or sheets_svc is None:
+        st.error("Sheets servisi hazır değil!")
+        return False
     try:
-        uploaded = drive.CreateFile({'id': EXCEL_FILE_ID})
-        uploaded.SetContentFile("temp.xlsx")
-        uploaded.Upload()  # My Drive için yeterli
+        if df_customers is None or df_customers.empty:
+            st.warning("Müşteri tablosu boş, Sheets’e yazılacak bir şey yok.")
+            return False
+        sheet = sheets_svc.spreadsheets()
+        # clear
+        execute_with_retry(sheet.values().batchClear(
+            spreadsheetId=SHEET_ID,
+            body={"ranges":[f"{MUSTERI_SHEET_NAME}!A:ZZ"]}
+        ))
+        # write
+        values = _df_to_values(df_customers)
+        execute_with_retry(sheet.values().update(
+            spreadsheetId=SHEET_ID,
+            range=f"{MUSTERI_SHEET_NAME}!A1",
+            valueInputOption="RAW",
+            body={"values": values}
+        ))
+        st.info(f"{MUSTERI_SHEET_NAME} sayfasına {len(df_customers)} satır yazıldı.")
+        return True
     except Exception as e:
-        st.error(f"CRM dosyası Drive’a yüklenemedi: {e}")
+        st.error(f"Sheets yazma hatası: {e}")
+        return False
+
+def push_customers_throttled():
+    now = datetime.datetime.utcnow().timestamp()
+    last = st.session_state.get("_last_sheet_write_ts", 0)
+    if now - last < 10:  # 10 sn içinde tekrar yazma (429 riski azalt)
+        return False
+    ok = write_customers_to_gsheet(df_musteri)
+    if ok:
+        st.session_state["_last_sheet_write_ts"] = now
+    return ok
+
+import smtplib
+from email.message import EmailMessage
+
+# Yeni cari için txt dosyasını oluşturma fonksiyonu
+def yeni_cari_txt_olustur(cari_dict, file_path="yeni_cari.txt"):
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(
+            f"Müşteri Adı: {cari_dict['Müşteri Adı']}\n"
+            f"Telefon: {cari_dict['Telefon']}\n"
+            f"E-posta: {cari_dict['E-posta']}\n"
+            f"Adres: {cari_dict['Adres']}\n"
+            f"Ülke: {cari_dict.get('Ülke', '')}\n"
+            f"Satış Temsilcisi: {cari_dict.get('Satış Temsilcisi', '')}\n"
+            f"Kategori: {cari_dict.get('Kategori', '')}\n"
+            f"Durum: {cari_dict.get('Durum', '')}\n"
+            f"Vade (Gün): {cari_dict.get('Vade (Gün)', '')}\n"
+            f"Ödeme Şekli: {cari_dict.get('Ödeme Şekli', '')}\n"
+            f"Para Birimi: {cari_dict.get('Para Birimi', '')}\n"  # Para birimini de ekliyoruz
+            f"DT Seçimi: {cari_dict.get('DT Seçimi', '')}\n"  # DT seçimini de ekliyoruz
+        )
+
+# E-posta göndermek için fonksiyon
+def send_email_with_txt(to_email, subject, body, file_path):
+    from_email = "todo@sekeroglugroup.com"  # Gönderen e-posta adresi
+    password = "vbgvforwwbcpzhxf"  # Gönderen e-posta şifresi
+
+    # E-posta mesajını oluştur
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = ", ".join(to_email)  # Birden fazla alıcıyı virgülle ayırarak ekliyoruz
+    msg.set_content(body)
+
+    # TXT dosyasını e-postaya ekle
+    with open(file_path, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="text",
+            subtype="plain",
+            filename="yeni_cari.txt"  # Dosyanın ismi
+        )
+
+    # E-posta göndermek için SMTP kullan
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(from_email, password)
+        smtp.send_message(msg)
 
 
-# ========= ŞIK SIDEBAR MENÜ (RADIO + ANINDA STATE) =========
 
 
+# ========= /ŞIK MENÜ =========
+# ===========================
+# ==== ŞIK SIDEBAR MENÜ
+# ===========================
 
-
-
-# 1) Menü grupları ve metadata
-DEFAULT_MENU_COLORS = ("#1D976C", "#93F9B9")
-
-
-def _normalize_hex(color):
-    if not isinstance(color, str):
-        return None
-    raw = color.strip().lstrip("#")
-    if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
-        return None
-    return f"#{raw.upper()}"
-
-
-def _mix_with_base(color, ratio, base="#000000"):
-    normalized = _normalize_hex(color)
-    if normalized is None:
-        normalized = DEFAULT_MENU_COLORS[0]
-
-    base_normalized = _normalize_hex(base) or "#000000"
-    
-    ratio = max(0.0, min(1.0, float(ratio)))
-    
-    raw = normalized.lstrip("#")
-    base_raw = base_normalized.lstrip("#")
-    
-    r = int(raw[0:2], 16)
-    g = int(raw[2:4], 16)
-    b = int(raw[4:6], 16)
-
-    return f"#{r:02X}{g:02X}{b:02X}"
-
-    base_r = int(base_raw[0:2], 16)
-    base_g = int(base_raw[2:4], 16)
-    base_b = int(base_raw[4:6], 16)
-
-    r = round(r + (base_r - r) * ratio)
-    g = round(g + (base_g - g) * ratio)
-    b = round(b + (base_b - b) * ratio)
-
-
-def _hex_to_rgba(color, alpha):
-    normalized = _normalize_hex(color)
-    if normalized is None:
-        normalized = DEFAULT_MENU_COLORS[0]
-    alpha = max(0.0, min(1.0, float(alpha)))
-    raw = normalized.lstrip("#")
-    r = int(raw[0:2], 16)
-    g = int(raw[2:4], 16)
-    b = int(raw[4:6], 16)
-    return f"rgba({r}, {g}, {b}, {alpha})"
-
-
-def _prepare_menu_groups(menu_groups):
-    entries = []
-    name_by_label = {}
-    label_by_name = {}
-    for group in menu_groups:
-        processed = []
-        for entry in group.get("entries", []):
-            base_colors = entry.get("colors") or DEFAULT_MENU_COLORS
-            if not isinstance(base_colors, (list, tuple)) or len(base_colors) != 2:
-                base_colors = DEFAULT_MENU_COLORS
-            c1 = _normalize_hex(base_colors[0]) or DEFAULT_MENU_COLORS[0]
-            c2 = _normalize_hex(base_colors[1]) or DEFAULT_MENU_COLORS[1]
-            icon = entry.get("icon", "")
-            label = entry.get("label") or f"{icon} {entry['name']}".strip()
-            metadata = {
-                "group": group["group"],
-                "name": entry["name"],
-                "icon": icon,
-                "label": label,
-                "colors": (c1, c2),
-            }
-            processed.append(metadata)
-            entries.append(metadata)
-            name_by_label[metadata["label"]] = metadata["name"]
-            label_by_name[metadata["name"]] = metadata["label"]
-        group["entries"] = processed
-    return entries, name_by_label, label_by_name
-
-
-def build_sidebar_menu_css(menu_groups):
-    css = [
-        '<style>',
-        'section[data-testid="stSidebar"] { padding-top: .5rem; }',
-        '.sidebar-section-title {',
-        '    font-size: 0.85rem;',
-        '    font-weight: 700;',
-        '    letter-spacing: 0.04em;',
-        '    margin: 18px 0 6px;',
-        '    text-transform: uppercase;',
-        '    color: rgba(255, 255, 255, 0.65);',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio > div { gap: 6px !important; }',
-        'div[data-testid="stSidebar"] .stRadio label { cursor: pointer; display: block; }',
-        'div[data-testid="stSidebar"] .stRadio label > input {',
-        '    position: absolute;',
-        '    opacity: 0;',
-        '    pointer-events: none;',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio label > div {',
-        '    position: relative;',
-        '    border-radius: 12px;',
-        '    padding: 10px 12px;',
-        '    margin-bottom: 4px;',
-        '    display: flex;',
-        '    align-items: center;',
-        '    gap: 8px;',
-        '    border: 1px solid rgba(9, 45, 27, 0.08);',
-        '    background: linear-gradient(135deg, #111111, #000000);',
-        '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);',
-        '    transition: background .2s ease, border .2s ease, box-shadow .2s ease;',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio label > div span {',
-        '    font-weight: 600;',
-        '    color: #F5F5F5;',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio label > div:hover {',
-        '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio label > input:focus-visible + div {',
-        '    outline: none;',
-        '}',
-        'div[data-testid="stSidebar"] .stRadio label > input:checked + div span {',
-        '    font-weight: 700;',
-        '}',
-        '',
-    ]
-
-    tint_levels = {"base": 0.8, "hover": 0.65, "active": 0.5}
-    border_levels = {"base": 0.72, "hover": 0.6, "active": 0.45}
-
-    for group_index, group in enumerate(menu_groups, start=1):
-        for entry_index, entry in enumerate(group.get("entries", []), start=1):
-            primary, secondary = entry["colors"]
-            base_from = _mix_with_base(primary, tint_levels["base"])
-            base_to = _mix_with_base(secondary, tint_levels["base"])
-            hover_from = _mix_with_base(primary, tint_levels["hover"])
-            hover_to = _mix_with_base(secondary, tint_levels["hover"])
-            active_from = _mix_with_base(primary, tint_levels["active"])
-            active_to = _mix_with_base(secondary, tint_levels["active"])
-            border_base = _mix_with_base(primary, border_levels["base"])
-            border_hover = _mix_with_base(primary, border_levels["hover"])
-            border_active = _mix_with_base(primary, border_levels["active"])
-            focus_ring = _hex_to_rgba(primary, 0.35)
-            selector = (
-                f'div[data-testid="stSidebar"] .stRadio:nth-of-type({group_index}) '
-                f'label:nth-of-type({entry_index})'
-            )
-            css.extend([
-                f'{selector} > div {{',
-                f'    background: linear-gradient(135deg, {base_from}, {base_to});',
-                f'    border-color: {border_base};',
-                '}',
-                f'{selector} > div:hover {{',
-                f'    background: linear-gradient(135deg, {hover_from}, {hover_to});',
-                f'    border-color: {border_hover};',
-                '}',
-                f'{selector} > input:focus-visible + div {{',
-                f'    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 4px {focus_ring};',
-                '}',
-                f'{selector} > input:checked + div {{',
-                f'    background: linear-gradient(135deg, {active_from}, {active_to});',
-                f'    border-color: {border_active};',
-                '    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 12px rgba(5, 20, 12, 0.16);',
-                '}',
-                f'{selector} > input:checked + div span {{',
-                '    color: #FFFFFF;',
-                '}',
-                '',
-            ])
-
-    css.append('</style>')
-    return "\n".join(css)
-
-
-MENU_GROUPS = [
-    {
-        "group": "Yönetim",
-        "entries": [
-            {"name": "Genel Bakış", "icon": "📊", "label": "📊 Genel Bakış", "colors": ("#1D976C", "#93F9B9")},
-            {"name": "Satış Analitiği", "icon": "📈", "label": "📈 Satış Analitiği", "colors": ("#0F2027", "#2C5364")},
-        ],
-    },
-    {
-        "group": "Müşteri & Satış",
-        "entries": [
-            {"name": "Yeni Cari Kaydı", "icon": "➕", "label": "➕ Yeni Cari Kaydı", "colors": ("#F7971E", "#FFD200")},
-            {"name": "Müşteri Portföyü", "icon": "👥", "label": "👥 Müşteri Portföyü", "colors": ("#36D1DC", "#5B86E5")},
-            {"name": "Etkileşim Günlüğü", "icon": "📝", "label": "📝 Etkileşim Günlüğü", "colors": ("#EB5757", "#F2994A")},
-            {"name": "Teklif Yönetimi", "icon": "📄", "label": "📄 Teklif Yönetimi", "colors": ("#56AB2F", "#A8E063")},
-        ],
-    },
-    {
-        "group": "Operasyon",
-        "entries": [
-            {"name": "Proforma Yönetimi", "icon": "🧾", "label": "🧾 Proforma Yönetimi", "colors": ("#8E54E9", "#4776E6")},
-            {"name": "Sipariş Operasyonları", "icon": "🚚", "label": "🚚 Sipariş Operasyonları", "colors": ("#00B4DB", "#0083B0")},
-            {"name": "ETA İzleme", "icon": "⏱️", "label": "⏱️ ETA İzleme", "colors": ("#24C6DC", "#514A9D")},
-        ],
-    },
-    {
-        "group": "Finans",
-        "entries": [
-            {"name": "İhracat Evrakları", "icon": "📦", "label": "📦 İhracat Evrakları", "colors": ("#C02425", "#F0CB35")},
-            {"name": "Tahsilat Planı", "icon": "💰", "label": "💰 Tahsilat Planı", "colors": ("#0F3443", "#34E89E")},
-        ],
-    },
-    {
-        "group": "Arşiv",
-        "entries": [
-            {"name": "Fuar Kayıtları", "icon": "🎪", "label": "🎪 Fuar Kayıtları", "colors": ("#FF512F", "#DD2476")},
-            {"name": "İçerik Arşivi", "icon": "🗂️", "label": "🗂️ İçerik Arşivi", "colors": ("#2F80ED", "#56CCF2")},
-        ],
-    },
+menuler = [
+    ("Genel Bakış", "📊"),
+    ("Yeni Cari Kaydı", "🧑‍💼"),
+    ("Müşteri Portföyü", "📒"),
+    ("Etkileşim Günlüğü", "☎️"),
+    ("Teklif Yönetimi", "💰"),
+    ("Proforma Yönetimi", "📄"),
+    ("Sipariş Operasyonları", "🚚"),
+    ("İhracat Evrakları", "📑"),
+    ("Tahsilat Planı", "⏰"),
+    ("ETA İzleme", "🛳️"),
+    ("Fuar Kayıtları", "🎫"),
+    ("İçerik Arşivi", "🗂️"),
+    ("Satış Analitiği", "📈"),
 ]
 
-MENU_ENTRIES, NAME_BY_LABEL, LABEL_BY_NAME = _prepare_menu_groups(MENU_GROUPS)
+# 2) Tüm kullanıcılar için aynı menüler
+allowed_menus = menuler
 
-if not MENU_ENTRIES:
-    st.stop()
+# 3) Etiketler ve haritalar
+labels = [f"{ikon} {isim}" for (isim, ikon) in allowed_menus]
+name_by_label = {f"{ikon} {isim}": isim for (isim, ikon) in allowed_menus}
+label_by_name = {isim: f"{ikon} {isim}" for (isim, ikon) in allowed_menus}
 
-default_menu_name = MENU_ENTRIES[0]["name"]
+# 4) Varsayılan state
+if "menu_state" not in st.session_state:
+    st.session_state.menu_state = allowed_menus[0][0]
 
-if "menu_state" not in st.session_state or st.session_state.menu_state not in LABEL_BY_NAME:
-    st.session_state.menu_state = default_menu_name
-    st.sidebar.markdown(build_sidebar_menu_css(MENU_GROUPS), unsafe_allow_html=True)
+# 5) CSS (kart görünümü; input gizlenmiyor—erişilebilir kalır)
+st.sidebar.markdown("""
+<style>
+section[data-testid="stSidebar"] { padding-top: .5rem; }
+div[data-testid="stSidebar"] .stRadio > div { gap: 10px !important; }
+div[data-testid="stSidebar"] .stRadio label {
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center;
+    transition: transform .06s ease, filter .15s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+div[data-testid="stSidebar"] .stRadio label span { font-weight: 700; color: #fff; }
+div[data-testid="stSidebar"] .stRadio label:hover { filter: brightness(1.08); transform: translateY(-1px); }
+div[data-testid="stSidebar"] .stRadio [aria-checked="true"] { outline: 2px solid rgba(255,255,255,0.25); }
 
-for group in MENU_GROUPS:
-    group_title = group["group"]
-    entries = group.get("entries", [])
-    st.sidebar.markdown(f"<div class='sidebar-section-title'>{group_title}</div>", unsafe_allow_html=True)
-    group_labels = [entry["label"] for entry in entries]
-    entry_names = [entry["name"] for entry in entries]
-    radio_key = f"menu_radio_{re.sub(r'[^0-9a-zA-Z]+', '_', group_title).lower()}"
-    last_selection_key = f"{radio_key}_previous"
-    previous_selection = st.session_state.get(radio_key)
-    last_rendered_selection = st.session_state.get(last_selection_key)
+/* Kart arka planları (sıra) */
+div[data-testid="stSidebar"] .stRadio label:nth-child(1)  { background: linear-gradient(90deg,#1D976C,#93F9B9); }  /* Özet */
+div[data-testid="stSidebar"] .stRadio label:nth-child(2)  { background: linear-gradient(90deg,#43cea2,#185a9d); }  /* Cari */
+div[data-testid="stSidebar"] .stRadio label:nth-child(3)  { background: linear-gradient(90deg,#ffb347,#ffcc33); }  /* Müşteri */
+div[data-testid="stSidebar"] .stRadio label:nth-child(4)  { background: linear-gradient(90deg,#ff5e62,#ff9966); }  /* Görüşme */
+div[data-testid="stSidebar"] .stRadio label:nth-child(5)  { background: linear-gradient(90deg,#8e54e9,#4776e6); }  /* Teklif */
+div[data-testid="stSidebar"] .stRadio label:nth-child(6)  { background: linear-gradient(90deg,#11998e,#38ef7d); }  /* Proforma */
+div[data-testid="stSidebar"] .stRadio label:nth-child(7)  { background: linear-gradient(90deg,#f7971e,#ffd200); }  /* Sipariş */
+div[data-testid="stSidebar"] .stRadio label:nth-child(8)  { background: linear-gradient(90deg,#f953c6,#b91d73); }  /* Evrak */
+div[data-testid="stSidebar"] .stRadio label:nth-child(9)  { background: linear-gradient(90deg,#43e97b,#38f9d7); }  /* Vade */
+div[data-testid="stSidebar"] .stRadio label:nth-child(10) { background: linear-gradient(90deg,#f857a6,#ff5858); }  /* ETA */
+div[data-testid="stSidebar"] .stRadio label:nth-child(11) { background: linear-gradient(90deg,#8e54e9,#bd4de6); }  /* Fuar */
+div[data-testid="stSidebar"] .stRadio label:nth-child(12) { background: linear-gradient(90deg,#4b79a1,#283e51); }  /* Medya */
+div[data-testid="stSidebar"] .stRadio label:nth-child(13) { background: linear-gradient(90deg,#2b5876,#4e4376); }  /* Satış Perf. */
+</style>
+""", unsafe_allow_html=True)
 
-    if previous_selection in group_labels:
-        current_label = previous_selection
-    elif st.session_state.menu_state in entry_names:
-        current_label = LABEL_BY_NAME[st.session_state.menu_state]
-    else:
-        current_label = group_labels[0] if group_labels else None
+# 6) Callback: seçilince anında state yaz (tek tıkta geçiş)
+def _on_menu_change():
+    sel_label = st.session_state.menu_radio_label
+    st.session_state.menu_state = name_by_label.get(sel_label, allowed_menus[0][0])
 
-    if current_label is not None:
-        st.session_state[radio_key] = current_label
+# 7) Radio’yu mevcut state’e göre başlat
+current_label = label_by_name.get(st.session_state.menu_state, labels[0])
+current_index = labels.index(current_label) if current_label in labels else 0
 
+st.sidebar.radio(
+    "Menü",
+    labels,
+    index=current_index,
+    label_visibility="collapsed",
+    key="menu_radio_label",
+    on_change=_on_menu_change
+)
 
-    index = group_labels.index(current_label) if current_label in group_labels else 0
-
-    selected_label = st.sidebar.radio(
-        "Menü",
-        group_labels,
-        index=index,
-        label_visibility="collapsed",
-        key=radio_key
-
-    ) if group_labels else ""
-
-    if (
-        selected_label
-        and last_rendered_selection is not None
-        and selected_label != last_rendered_selection
-        and selected_label in NAME_BY_LABEL
-     ):
-        st.session_state.menu_state = NAME_BY_LABEL[selected_label]
-    if group_labels:
-        st.session_state[last_selection_key] = selected_label
-
-
-# 7) Kullanım: seçili menü adı
-
+# 8) Kullanım: seçili menü adı
 menu = st.session_state.menu_state
-# ========= /ŞIK MENÜ =========
+
+
+# Sidebar: manuel senkron
+with st.sidebar.expander("🔄 Sheets Senkron"):
+    if st.button("Müşterileri Sheets’e Yaz"):
+        push_customers_throttled()
 
 ### ===========================
 ### === GENEL BAKIŞ (Vade Durumu Dahil) ===
@@ -731,6 +655,8 @@ if menu == "Yeni Cari Kaydı":
 
         st.balloons()
         st.rerun()
+
+
 
                 
 ### ===========================
