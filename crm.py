@@ -1309,7 +1309,7 @@ elif menu == "Proforma Yönetimi":
         df_proforma.loc[mask_bos_id, "ID"] = [str(uuid.uuid4()) for _ in range(mask_bos_id.sum())]
         update_excel()
 
-def render_siparis_formu_yukleme(df, hedef_id):
+    def render_siparis_formu_yukleme(df, hedef_id):
         if not hedef_id:
             return
 
