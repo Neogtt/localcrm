@@ -549,11 +549,13 @@ if menu == "Genel Bakış":
     df_evrak["Ödendi"] = df_evrak["Ödendi"].fillna(False).astype(bool)
 
     vade_df = df_evrak[df_evrak["Vade Tarihi"].notna() & (~df_evrak["Ödendi"])].copy()
+    gecikmis_df = pd.DataFrame()
     if vade_df.empty:
         st.info("Açık vade kaydı yok.")
     else:
         vade_df["Vade Tarihi"] = pd.to_datetime(vade_df["Vade Tarihi"])
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - pd.to_datetime(datetime.date.today())).dt.days
+        vade_df = vade_df.sort_values("Kalan Gün", ascending=True)
         gecikmis_df = vade_df[vade_df["Kalan Gün"] < 0].copy()
         st.dataframe(vade_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
 
