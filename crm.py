@@ -554,7 +554,14 @@ if menu == "Genel Bakış":
     else:
         vade_df["Vade Tarihi"] = pd.to_datetime(vade_df["Vade Tarihi"])
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - pd.to_datetime(datetime.date.today())).dt.days
+        gecikmis_df = vade_df[vade_df["Kalan Gün"] < 0].copy()
         st.dataframe(vade_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+
+    st.markdown("#### Gecikmiş Ödemeler")
+    if not gecikmis_df.empty:
+        st.dataframe(gecikmis_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+    else:
+        st.info("Gecikmiş ödeme bulunmuyor.")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.info("Daha detaylı işlem yapmak için sol menüden ilgili bölüme geçebilirsiniz.")
