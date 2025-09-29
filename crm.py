@@ -2069,7 +2069,9 @@ elif menu == "Tahsilat Planı":
                 format_func=lambda i: f"{view.loc[view['_row']==i,'Müşteri Adı'].values[0]} | {view.loc[view['_row']==i,'Fatura No'].values[0]}"
             )
 
-            odendi_mi = st.checkbox("Ödendi olarak işaretle")
+            # Seçilen satırın mevcut ödeme durumunu checkbox'ta varsayılan değer olarak göster
+            mevcut_odendi = bool(view.loc[view["_row"] == sec, "Ödendi"].iloc[0])
+            odendi_mi = st.checkbox("Ödendi olarak işaretle", value=mevcut_odendi)
             if st.button("Kaydet / Güncelle"):
                 # Ana df_evrak’taki satıra yaz
                 # _row önceki index, aynı sırayı df_evrak’ta güncellemek için kullanıyoruz
