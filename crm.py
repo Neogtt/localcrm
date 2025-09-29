@@ -1846,6 +1846,8 @@ elif menu == "İhracat Evrakları":
             st.error("Müşteri, Proforma No, Fatura No ve Tutar zorunludur.")
             st.stop()
 
+        tutar_num = smart_to_num(tutar)
+
         # 1) Dosyaları Drive'a yükle (varsa). Yoksa eski linki koru.
         file_urls = {}
         for col, _label in evrak_tipleri:
@@ -1870,6 +1872,7 @@ elif menu == "İhracat Evrakları":
             idx = df_evrak[key_mask].index[0]
             df_evrak.at[idx, "Fatura Tarihi"]    = fatura_tarih
             df_evrak.at[idx, "Tutar"]            = tutar
+            df_evrak.at[idx, "Tutar_num"]        = tutar_num
             df_evrak.at[idx, "Vade (gün)"]       = vade_gun
             df_evrak.at[idx, "Vade Tarihi"]      = vade_tarihi_yaz
             df_evrak.at[idx, "Ülke"]             = ulke
@@ -1886,6 +1889,7 @@ elif menu == "İhracat Evrakları":
                 "Fatura No": fatura_no,
                 "Fatura Tarihi": fatura_tarih,
                 "Tutar": tutar,
+                "Tutar_num": tutar_num,
                 "Vade (gün)": vade_gun,
                 "Vade Tarihi": vade_tarihi_yaz,
                 "Ülke": ulke,
@@ -1899,6 +1903,10 @@ elif menu == "İhracat Evrakları":
             }
             df_evrak = pd.concat([df_evrak, pd.DataFrame([new_row])], ignore_index=True)
             islem = "eklendi"
+        if "Tutar_num" not in df_evrak.columns:
+            df_evrak["Tutar_num"] = pd.NA
+        df_evrak["Tutar_num"] = pd.to_numeric(df_evrak["Tutar_num"], errors="coerce")
+
 
         update_excel()
         st.success(f"Evrak {islem}!")
