@@ -619,9 +619,13 @@ if menu == "Yeni Cari Kaydı":
             para_birimi = st.selectbox("Para Birimi", ["USD", "EURO", "TL", "RUBLE"], index=0)
             dt_secim = st.selectbox("DT Seçin", ["DT-1", "DT-2", "DT-3", "DT-4"], index=0)
 
-        submitted = st.form_submit_button("Kaydet")
+        col_submit1, col_submit2 = st.columns([1, 1])
+        save_clicked = col_submit1.form_submit_button("Kaydet")
+        save_and_send_clicked = col_submit2.form_submit_button("Kaydet ve Muhasebeye Gönder")
 
-    if submitted:
+
+    if save_clicked or save_and_send_clicked:
+        send_to_accounting = save_and_send_clicked
         # --- Normalizasyon ---
         name_n = _clean_text(name)
         ulke_n = _clean_text(ulke)
@@ -670,18 +674,21 @@ if menu == "Yeni Cari Kaydı":
         df_musteri = pd.concat([df_musteri, pd.DataFrame([new_row])], ignore_index=True)
         update_excel()
 
-        # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
-        try:
-            yeni_cari_txt_olustur(new_row)
-            send_email_with_txt(
-                to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
-                subject="Yeni Cari Açılışı",
-                body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
-                file_path="yeni_cari.txt"
-            )
-            st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
-        except Exception as e:
-            st.warning(f"Müşteri eklendi ancak e‑posta gönderilemedi: {e}")
+        if send_to_accounting:
+            # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
+            try:
+                yeni_cari_txt_olustur(new_row)
+                send_email_with_txt(
+                    to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                    subject="Yeni Cari Açılışı",
+                    body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
+                    file_path="yeni_cari.txt"
+                )
+                st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
+            except Exception as e:
+                st.warning(f"Müşteri eklendi ancak e‑posta gönderilemedi: {e}")
+        else:
+            st.success("Müşteri eklendi. Muhasebeye göndermek için ilgili butonu kullanabilirsiniz.")
 
         st.balloons()
         st.rerun()
