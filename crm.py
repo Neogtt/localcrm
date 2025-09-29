@@ -519,11 +519,11 @@ if menu == "Genel Bakış":
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
     eta_yolda = df_proforma[(df_proforma["Sevk Durumu"] == "Sevkedildi") & (~df_proforma["Sevk Durumu"].isin(["Ulaşıldı"]))] if "Sevk Durumu" in df_proforma.columns else pd.DataFrame()
-    try:
-        toplam_eta = pd.to_numeric(eta_yolda["Tutar"], errors="coerce").sum()
-    except:
-        toplam_eta = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Toplam: {toplam_eta:,.2f} USD</div>", unsafe_allow_html=True)
+    sevkiyat_sayisi = len(eta_yolda)
+    st.markdown(
+        f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Sevkiyat Sayısı: {sevkiyat_sayisi}</div>",
+        unsafe_allow_html=True,
+    )
     if eta_yolda.empty:
         st.info("Yolda olan (sevk edilmiş) sipariş yok.")
     else:
