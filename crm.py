@@ -862,8 +862,9 @@ if menu == "Müşteri Portföyü":
                     index=["DT-1", "DT-2", "DT-3", "DT-4"].index(df_musteri.at[orj_idx, "DT Seçimi"]) if df_musteri.at[orj_idx, "DT Seçimi"] in ["DT-1", "DT-2", "DT-3", "DT-4"] else 0
                 )
 
-                colu, cols = st.columns(2)
+                colu, colm, cols = st.columns(3)
                 guncelle = colu.form_submit_button("Güncelle")
+                muhasebe_gonder = colm.form_submit_button("Muhasebeye Gönder")
                 sil = cols.form_submit_button("Sil")
 
             if guncelle:
@@ -882,6 +883,36 @@ if menu == "Müşteri Portföyü":
                 update_excel()
                 st.success("Müşteri bilgisi güncellendi!")
                 st.rerun()
+
+            if muhasebe_gonder:
+                guncel_bilgiler = {
+                    "Müşteri Adı": name,
+                    "Telefon": phone,
+                    "E-posta": email,
+                    "Adres": address,
+                    "Ülke": ulke,
+                    "Satış Temsilcisi": temsilci,
+                    "Kategori": kategori,
+                    "Durum": aktif_pasif,
+                    "Vade (Gün)": vade,
+                    "Ödeme Şekli": odeme_sekli,
+                    "Para Birimi": para_birimi,
+                    "DT Seçimi": dt_secimi,
+                }
+
+                try:
+                    yeni_cari_txt_olustur(guncel_bilgiler)
+                    send_email_with_txt(
+                        to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                        subject="Güncel Cari Bilgisi",
+                        body="Mevcut müşteri için güncel cari bilgileri ekte yer almaktadır.",
+                        file_path="yeni_cari.txt",
+                    )
+                except Exception as e:
+                    st.warning(f"Muhasebeye gönderim sırasında bir hata oluştu: {e}")
+                else:
+                    st.success("Güncel müşteri bilgileri muhasebeye gönderildi!")
+                    st.rerun()
 
             if sil:
                 df_musteri = df_musteri.drop(orj_idx).reset_index(drop=True)
