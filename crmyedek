@@ -519,11 +519,11 @@ if menu == "Genel Bakış":
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
     eta_yolda = df_proforma[(df_proforma["Sevk Durumu"] == "Sevkedildi") & (~df_proforma["Sevk Durumu"].isin(["Ulaşıldı"]))] if "Sevk Durumu" in df_proforma.columns else pd.DataFrame()
-    try:
-        toplam_eta = pd.to_numeric(eta_yolda["Tutar"], errors="coerce").sum()
-    except:
-        toplam_eta = 0
-    st.markdown(f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Toplam: {toplam_eta:,.2f} USD</div>", unsafe_allow_html=True)
+    sevkiyat_sayisi = len(eta_yolda)
+    st.markdown(
+        f"<div style='font-size:1.3em; color:#c471f5; font-weight:bold;'>Sevkiyat Sayısı: {sevkiyat_sayisi}</div>",
+        unsafe_allow_html=True,
+    )
     if eta_yolda.empty:
         st.info("Yolda olan (sevk edilmiş) sipariş yok.")
     else:
@@ -619,9 +619,13 @@ if menu == "Yeni Cari Kaydı":
             para_birimi = st.selectbox("Para Birimi", ["USD", "EURO", "TL", "RUBLE"], index=0)
             dt_secim = st.selectbox("DT Seçin", ["DT-1", "DT-2", "DT-3", "DT-4"], index=0)
 
-        submitted = st.form_submit_button("Kaydet")
+        col_submit1, col_submit2 = st.columns([1, 1])
+        save_clicked = col_submit1.form_submit_button("Kaydet")
+        save_and_send_clicked = col_submit2.form_submit_button("Kaydet ve Muhasebeye Gönder")
 
-    if submitted:
+
+    if save_clicked or save_and_send_clicked:
+        send_to_accounting = save_and_send_clicked
         # --- Normalizasyon ---
         name_n = _clean_text(name)
         ulke_n = _clean_text(ulke)
@@ -670,18 +674,21 @@ if menu == "Yeni Cari Kaydı":
         df_musteri = pd.concat([df_musteri, pd.DataFrame([new_row])], ignore_index=True)
         update_excel()
 
-        # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
-        try:
-            yeni_cari_txt_olustur(new_row)
-            send_email_with_txt(
-                to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
-                subject="Yeni Cari Açılışı",
-                body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
-                file_path="yeni_cari.txt"
-            )
-            st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
-        except Exception as e:
-            st.warning(f"Müşteri eklendi ancak e‑posta gönderilemedi: {e}")
+        if send_to_accounting:
+            # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
+            try:
+                yeni_cari_txt_olustur(new_row)
+                send_email_with_txt(
+                    to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                    subject="Yeni Cari Açılışı",
+                    body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
+                    file_path="yeni_cari.txt"
+                )
+                st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
+            except Exception as e:
+                st.warning(f"Müşteri eklendi ancak e‑posta gönderilemedi: {e}")
+        else:
+            st.success("Müşteri eklendi. Muhasebeye göndermek için ilgili butonu kullanabilirsiniz.")
 
         st.balloons()
         st.rerun()
@@ -855,8 +862,9 @@ if menu == "Müşteri Portföyü":
                     index=["DT-1", "DT-2", "DT-3", "DT-4"].index(df_musteri.at[orj_idx, "DT Seçimi"]) if df_musteri.at[orj_idx, "DT Seçimi"] in ["DT-1", "DT-2", "DT-3", "DT-4"] else 0
                 )
 
-                colu, cols = st.columns(2)
+                colu, colm, cols = st.columns(3)
                 guncelle = colu.form_submit_button("Güncelle")
+                muhasebe_gonder = colm.form_submit_button("Muhasebeye Gönder")
                 sil = cols.form_submit_button("Sil")
 
             if guncelle:
@@ -875,6 +883,36 @@ if menu == "Müşteri Portföyü":
                 update_excel()
                 st.success("Müşteri bilgisi güncellendi!")
                 st.rerun()
+
+            if muhasebe_gonder:
+                guncel_bilgiler = {
+                    "Müşteri Adı": name,
+                    "Telefon": phone,
+                    "E-posta": email,
+                    "Adres": address,
+                    "Ülke": ulke,
+                    "Satış Temsilcisi": temsilci,
+                    "Kategori": kategori,
+                    "Durum": aktif_pasif,
+                    "Vade (Gün)": vade,
+                    "Ödeme Şekli": odeme_sekli,
+                    "Para Birimi": para_birimi,
+                    "DT Seçimi": dt_secimi,
+                }
+
+                try:
+                    yeni_cari_txt_olustur(guncel_bilgiler)
+                    send_email_with_txt(
+                        to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                        subject="Güncel Cari Bilgisi",
+                        body="Mevcut müşteri için güncel cari bilgileri ekte yer almaktadır.",
+                        file_path="yeni_cari.txt",
+                    )
+                except Exception as e:
+                    st.warning(f"Muhasebeye gönderim sırasında bir hata oluştu: {e}")
+                else:
+                    st.success("Güncel müşteri bilgileri muhasebeye gönderildi!")
+                    st.rerun()
 
             if sil:
                 df_musteri = df_musteri.drop(orj_idx).reset_index(drop=True)
@@ -1700,138 +1738,6 @@ elif menu == "Sipariş Operasyonları":
 ### ===========================
 
 elif menu == "İhracat Evrakları":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
-
-    for col in [
-        "Proforma No", "Vade (gün)", "Vade Tarihi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli",
-        "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
-        "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
-        "Yük Resimleri", "EK Belgeler", "Ödendi"
-    ]:
-        if col not in df_evrak.columns:
-            df_evrak[col] = "" if col != "Ödendi" else False
-
-    musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().unique().tolist())
-    secilen_musteri = st.selectbox("Müşteri Seç", [""] + musteri_secenek)
-    secilen_proformalar = df_proforma[df_proforma["Müşteri Adı"] == secilen_musteri] if secilen_musteri else pd.DataFrame()
-    proforma_no_sec = ""
-    if not secilen_proformalar.empty:
-        proforma_no_sec = st.selectbox("Proforma No Seç", [""] + secilen_proformalar["Proforma No"].astype(str).tolist())
-    else:
-        proforma_no_sec = st.selectbox("Proforma No Seç", [""])
-
-    musteri_info = df_musteri[df_musteri["Müşteri Adı"] == secilen_musteri]
-    ulke = musteri_info["Ülke"].values[0] if not musteri_info.empty else ""
-    temsilci = musteri_info["Satış Temsilcisi"].values[0] if not musteri_info.empty else ""
-    odeme = musteri_info["Ödeme Şekli"].values[0] if not musteri_info.empty else ""
-
-    # --- 1. Önceki evrakların linklerini çek ---
-    onceki_evrak = df_evrak[
-        (df_evrak["Müşteri Adı"] == secilen_musteri) &
-        (df_evrak["Proforma No"] == proforma_no_sec)
-    ]
-
-    def file_link_html(label, url):
-        if url:
-            return f'<div style="margin-top:-6px;"><a href="{url}" target="_blank" style="color:#219A41;">[Daha önce yüklenmiş {label}]</a></div>'
-        else:
-            return f'<div style="margin-top:-6px; color:#b00020; font-size:0.95em;">(Daha önce yüklenmemiş)</div>'
-
-    evrak_tipleri = [
-        ("Commercial Invoice", "Commercial Invoice PDF"),
-        ("Sağlık Sertifikası", "Sağlık Sertifikası PDF"),
-        ("Packing List", "Packing List PDF"),
-        ("Konşimento", "Konşimento PDF"),
-        ("İhracat Beyannamesi", "İhracat Beyannamesi PDF"),
-    ]
-
-    with st.form("add_evrak"):
-        fatura_no = st.text_input("Fatura No")
-        fatura_tarih = st.date_input("Fatura Tarihi", value=datetime.date.today())
-        tutar = st.text_input("Fatura Tutarı (USD)")
-        vade_gun = ""
-        vade_tarihi = ""
-        if secilen_musteri and proforma_no_sec:
-            proforma_kayit = df_proforma[(df_proforma["Müşteri Adı"] == secilen_musteri) & (df_proforma["Proforma No"] == proforma_no_sec)]
-            if not proforma_kayit.empty:
-                vade_gun = proforma_kayit.iloc[0].get("Vade (gün)", "")
-                try:
-                    vade_gun_int = int(vade_gun)
-                    vade_tarihi = fatura_tarih + datetime.timedelta(days=vade_gun_int)
-                except:
-                    vade_tarihi = ""
-        st.text_input("Vade (gün)", value=vade_gun, key="vade_gun", disabled=True)
-        st.date_input("Vade Tarihi", value=vade_tarihi if vade_tarihi else fatura_tarih, key="vade_tarihi", disabled=True)
-        st.text_input("Ülke", value=ulke, disabled=True)
-        st.text_input("Satış Temsilcisi", value=temsilci, disabled=True)
-        st.text_input("Ödeme Şekli", value=odeme, disabled=True)
-        
-        # --- 2. Evrak yükleme alanları ve eski dosya linkleri ---
-        uploaded_files = {}
-        for col, label in evrak_tipleri:
-            uploaded_files[col] = st.file_uploader(label, type="pdf", key=f"{col}_upload")
-            prev_url = onceki_evrak.iloc[0][col] if not onceki_evrak.empty else ""
-            st.markdown(file_link_html(label, prev_url), unsafe_allow_html=True)
-        
-        submitted = st.form_submit_button("Kaydet")
-
-        if submitted:
-            if not fatura_no.strip() or not tutar.strip():
-                st.error("Fatura No ve Tutar boş olamaz!")
-            else:
-                # Dosya yükleme ve eski dosya kontrolü
-                file_urls = {}
-                for col, label in evrak_tipleri:
-                    uploaded_file = uploaded_files[col]
-                    # Önce yeni dosya yüklendiyse Drive'a yükle, yoksa eski dosya linkini al
-                    if uploaded_file:
-                        file_name = f"{col}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-                        temp_path = os.path.join(".", file_name)
-                        with open(temp_path, "wb") as f:
-                            f.write(uploaded_file.read())
-                        gfile = drive.CreateFile({'title': file_name, 'parents': [{'id': "14FTE1oSeIeJ6Y_7C0oQyZPKC8dK8hr1J"}]})
-                        gfile.SetContentFile(temp_path)
-                        gfile.Upload()
-                        file_urls[col] = f"https://drive.google.com/file/d/{gfile['id']}/view?usp=sharing"
-                        try:
-                            os.remove(temp_path)
-                        except:
-                            pass
-                    else:
-                        file_urls[col] = onceki_evrak.iloc[0][col] if not onceki_evrak.empty else ""
-
-                new_row = {
-                    "Müşteri Adı": secilen_musteri,
-                    "Proforma No": proforma_no_sec,
-                    "Fatura No": fatura_no,
-                    "Fatura Tarihi": fatura_tarih,
-                    "Tutar": tutar,
-                    "Vade (gün)": vade_gun,
-                    "Vade Tarihi": vade_tarihi,
-                    "Ülke": ulke,
-                    "Satış Temsilcisi": temsilci,
-                    "Ödeme Şekli": odeme,
-                    "Commercial Invoice": file_urls.get("Commercial Invoice", ""),
-                    "Sağlık Sertifikası": file_urls.get("Sağlık Sertifikası", ""),
-                    "Packing List": file_urls.get("Packing List", ""),
-                    "Konşimento": file_urls.get("Konşimento", ""),
-                    "İhracat Beyannamesi": file_urls.get("İhracat Beyannamesi", ""),
-                    "Fatura PDF": "",  # Gerekirse ekle
-                    "Sipariş Formu": "",
-                    "Yük Resimleri": "",
-                    "EK Belgeler": "",
-                    "Ödendi": False,
-                }
-                df_evrak = pd.concat([df_evrak, pd.DataFrame([new_row])], ignore_index=True)
-                update_excel()
-                st.success("Evrak eklendi!")
-                st.rerun()
-
-### ===========================
-### --- İHRACAT EVRAKLARI MENÜSÜ (ID + tekilleştirme) ---
-### ===========================
-
-elif menu == "İhracat Evrakları":
 
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
 
@@ -1940,6 +1846,8 @@ elif menu == "İhracat Evrakları":
             st.error("Müşteri, Proforma No, Fatura No ve Tutar zorunludur.")
             st.stop()
 
+        tutar_num = smart_to_num(tutar)
+
         # 1) Dosyaları Drive'a yükle (varsa). Yoksa eski linki koru.
         file_urls = {}
         for col, _label in evrak_tipleri:
@@ -1964,6 +1872,7 @@ elif menu == "İhracat Evrakları":
             idx = df_evrak[key_mask].index[0]
             df_evrak.at[idx, "Fatura Tarihi"]    = fatura_tarih
             df_evrak.at[idx, "Tutar"]            = tutar
+            df_evrak.at[idx, "Tutar_num"]        = tutar_num
             df_evrak.at[idx, "Vade (gün)"]       = vade_gun
             df_evrak.at[idx, "Vade Tarihi"]      = vade_tarihi_yaz
             df_evrak.at[idx, "Ülke"]             = ulke
@@ -1980,6 +1889,7 @@ elif menu == "İhracat Evrakları":
                 "Fatura No": fatura_no,
                 "Fatura Tarihi": fatura_tarih,
                 "Tutar": tutar,
+                "Tutar_num": tutar_num,
                 "Vade (gün)": vade_gun,
                 "Vade Tarihi": vade_tarihi_yaz,
                 "Ülke": ulke,
@@ -1993,6 +1903,10 @@ elif menu == "İhracat Evrakları":
             }
             df_evrak = pd.concat([df_evrak, pd.DataFrame([new_row])], ignore_index=True)
             islem = "eklendi"
+        if "Tutar_num" not in df_evrak.columns:
+            df_evrak["Tutar_num"] = pd.NA
+        df_evrak["Tutar_num"] = pd.to_numeric(df_evrak["Tutar_num"], errors="coerce")
+
 
         update_excel()
         st.success(f"Evrak {islem}!")
@@ -2069,7 +1983,9 @@ elif menu == "Tahsilat Planı":
                 format_func=lambda i: f"{view.loc[view['_row']==i,'Müşteri Adı'].values[0]} | {view.loc[view['_row']==i,'Fatura No'].values[0]}"
             )
 
-            odendi_mi = st.checkbox("Ödendi olarak işaretle")
+            # Seçilen satırın mevcut ödeme durumunu checkbox'ta varsayılan değer olarak göster
+            mevcut_odendi = bool(view.loc[view["_row"] == sec, "Ödendi"].iloc[0])
+            odendi_mi = st.checkbox("Ödendi olarak işaretle", value=mevcut_odendi)
             if st.button("Kaydet / Güncelle"):
                 # Ana df_evrak’taki satıra yaz
                 # _row önceki index, aynı sırayı df_evrak’ta güncellemek için kullanıyoruz
