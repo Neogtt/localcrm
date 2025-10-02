@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
-import io, os, datetime, tempfile, re, json, time, uuid
+import io, os, datetime, tempfile, re, json, time, uuid, html
 import numpy as np
 import smtplib
 from email.message import EmailMessage
@@ -307,6 +307,86 @@ def yeni_cari_txt_olustur(cari_dict, file_path="yeni_cari.txt"):
             f"Para Birimi: {cari_dict.get('Para Birimi', '')}\n"  # Para birimini de ekliyoruz
             f"DT Seçimi: {cari_dict.get('DT Seçimi', '')}\n"  # DT seçimini de ekliyoruz
         )
+# --- E-POSTA İMZA YARDIMCILARI ---
+
+SIGNATURE_PROFILES = {
+    "admin": {
+        "full_name": "KEMAL İLKER ÇELİKKALKAN",
+        "title": "Export Manager",
+    },
+    "export1": {
+        "full_name": "HÜSEYİN POLAT",
+        "title": "Export Area Sales Manager",
+    },
+    "Boss": {
+        "full_name": "FERHAT ŞEKEROĞLU",
+        "title": "MEMBER OF BOARD",
+    },
+}
+
+SIGNATURE_BASE_INFO = {
+    "company": "ŞEKEROĞLU GROUP",
+    "department": "International Sales & Export",
+    "phone": "+90 (342) 337 09 09",
+    "email": "export1@sekeroglugroup.com",
+    "website": "https://www.sekeroglugroup.com",
+    "address": "Sanayi mah. 60129 No'lu Cad. No : 7 Şehitkamil / Gaziantep",
+    }
+
+
+def _active_signature_info():
+    user = st.session_state.get("user") if "user" in st.session_state else None
+    info = SIGNATURE_PROFILES.get(user)
+    if not info:
+        info = {
+            "full_name": "ŞEKEROĞLU EXPORT TEAM",
+            "title": "International Sales Representative",
+        }
+    return info
+
+
+def text_signature() -> str:
+    info = _active_signature_info()
+    base = SIGNATURE_BASE_INFO
+    lines = [
+        info["full_name"],
+        info["title"],
+        f"{base['company']} | {base['department']}",
+        f"Telefon: {base['phone']}",
+        f"E-posta: {base['email']}",
+        f"Web: {base['website']}",
+        f"Adres: {base['address']}",
+    ]
+    return "\n".join(lines)
+
+
+def html_signature() -> str:
+    info = _active_signature_info()
+    base = SIGNATURE_BASE_INFO
+    name = html.escape(info["full_name"])
+    title = html.escape(info["title"])
+    company = html.escape(base["company"])
+    department = html.escape(base["department"])
+    phone = html.escape(base["phone"])
+    email = html.escape(base["email"])
+    website = html.escape(base["website"])
+    address = html.escape(base["address"])
+
+    return (
+        "<table cellpadding=\"0\" cellspacing=\"0\" style=\"font-family:Arial,sans-serif;color:#333333;\">"
+        f"<tr><td style='font-size:16px;font-weight:bold;color:#219A41;'>{name}</td></tr>"
+        f"<tr><td style='font-size:13px;color:#555555;'>{title}</td></tr>"
+        "<tr><td style='padding-top:10px;font-size:13px;color:#333333;'>"
+        f"<div style='font-weight:bold;color:#219A41;'>{company}</div>"
+        f"<div>{department}</div>"
+        f"<div>Telefon: {phone}</div>"
+        f"<div>E-posta: <a href='mailto:{email}' style='color:#219A41;text-decoration:none;'>{email}</a></div>"
+        f"<div>Web: <a href='{website}' style='color:#219A41;text-decoration:none;'>{website}</a></div>"
+        f"<div>{address}</div>"
+        "</td></tr>"
+        "</table>"
+    )
+
 
 # E-posta göndermek için fonksiyon
 def send_email(to_email, subject, body, attachments=None, fallback_txt_path=None):
@@ -397,8 +477,23 @@ def send_fair_bulk_email(to_emails, subject, body, attachments=None):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = ", ".join(to_emails)
-    msg.set_content(body)
+    msg["To"] = from_email
+    msg["Bcc"] = ", ".join(to_emails)
+    body_text = (body or "").strip()
+    if body_text:
+        plain_body = f"{body_text}\n\n{text_signature()}"
+    else:
+        plain_body = text_signature()
+    msg.set_content(plain_body)
+
+    escaped_body = html.escape(body_text).replace("\n", "<br>") if body_text else ""
+    html_body = (
+        "<div style='font-family:Arial,sans-serif;color:#333333;'>"
+        f"{escaped_body}"
+        "</div>"
+        f"<div style='margin-top:16px;'>{html_signature()}</div>"
+    )
+    msg.add_alternative(html_body, subtype="html")
 
     attachments = attachments or []
     for uploaded_file in attachments:
@@ -2658,11 +2753,7 @@ if menu == "Fuar Kayıtları":
 
                     subject = st.text_input("Konu", key=f"bulk_mail_subject_{fuar_adi}")
                     body = st.text_area("E-posta İçeriği", key=f"bulk_mail_body_{fuar_adi}")
-                    signature_input = st.text_area(
-                        "E-posta İmzası",
-                        key=f"bulk_mail_signature_{fuar_adi}",
-                        help="İmzayı eklemek istemezseniz boş bırakabilirsiniz."
-                    )
+                    
                     attachments = st.file_uploader(
                         "Ek Dosyalar",
                         accept_multiple_files=True,
@@ -2677,13 +2768,12 @@ if menu == "Fuar Kayıtları":
                         elif not body.strip():
                             st.warning("Lütfen e-posta içeriği girin.")
                         else:
-                            signature = signature_input.strip()
-                            final_body = f"{body}\n\n{signature}" if signature else body
+                            
                             try:
                                 send_fair_bulk_email(
                                     selected_recipients,
                                     subject.strip(),
-                                    final_body,
+                                    body,
                                     attachments or []
                                 )
                                 st.success("E-postalar başarıyla gönderildi.")
