@@ -309,7 +309,7 @@ def yeni_cari_txt_olustur(cari_dict, file_path="yeni_cari.txt"):
         )
 
 # E-posta göndermek için fonksiyon
-def send_email_with_txt(to_email, subject, body, file_path):
+def send_email(to_email, subject, body, attachments=None, fallback_txt_path=None):
     from_email = "todo@sekeroglugroup.com"  # Gönderen e-posta adresi
     password = "vbgvforwwbcpzhxf"  # Gönderen e-posta şifresi
 
@@ -320,19 +320,108 @@ def send_email_with_txt(to_email, subject, body, file_path):
     msg["To"] = ", ".join(to_email)  # Birden fazla alıcıyı virgülle ayırarak ekliyoruz
     msg.set_content(body)
 
-    # TXT dosyasını e-postaya ekle
-    with open(file_path, "rb") as f:
+    prepared_attachments = attachments or []
+
+    for attachment in prepared_attachments:
+        if not isinstance(attachment, (tuple, list)) or len(attachment) != 3:
+            continue
+
+        filename, content_bytes, mime_type = attachment
+
+        if isinstance(content_bytes, memoryview):
+            content_bytes = content_bytes.tobytes()
+
+        if not isinstance(content_bytes, (bytes, bytearray)):
+            content_bytes = bytes(content_bytes)
+
+        mime = (mime_type or "application/octet-stream").strip()
+        if "/" in mime:
+            maintype, subtype = mime.split("/", 1)
+        else:
+            maintype, subtype = mime, "octet-stream"
+
         msg.add_attachment(
-            f.read(),
-            maintype="text",
-            subtype="plain",
-            filename="yeni_cari.txt"  # Dosyanın ismi
+           bytes(content_bytes),
+            maintype=maintype,
+            subtype=subtype,
+            filename=filename,
         )
+
+    if not prepared_attachments and fallback_txt_path:
+        try:
+            with open(fallback_txt_path, "rb") as f:
+                msg.add_attachment(
+                    f.read(),
+                    maintype="text",
+                    subtype="plain",
+                    filename=os.path.basename(fallback_txt_path) or "yeni_cari.txt",
+                )
+        except FileNotFoundError:
+            pass
+
 
     # E-posta göndermek için SMTP kullan
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(from_email, password)
         smtp.send_message(msg)
+
+def extract_unique_emails(email_series: pd.Series) -> list:
+    emails = []
+    if email_series is None:
+        return emails
+    for raw in email_series.dropna():
+        raw_str = str(raw).strip()
+        if not raw_str:
+            continue
+        parts = re.split(r"[;,\s]+", raw_str)
+        for part in parts:
+            address = part.strip()
+            if address:
+                emails.append(address)
+    # Benzersiz ve alfabetik sırada döndür
+    seen = {}
+    for mail in emails:
+        key = mail.lower()
+        if key not in seen:
+            seen[key] = mail
+    return sorted(seen.values(), key=lambda x: x.lower())
+
+
+def send_fair_bulk_email(to_emails, subject, body, attachments=None):
+    if not to_emails:
+        raise ValueError("E-posta alıcı listesi boş olamaz.")
+
+    from_email = "todo@sekeroglugroup.com"
+    password = "vbgvforwwbcpzhxf"
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = ", ".join(to_emails)
+    msg.set_content(body)
+
+    attachments = attachments or []
+    for uploaded_file in attachments:
+        if uploaded_file is None:
+            continue
+        file_bytes = uploaded_file.getvalue()
+        maintype, subtype = "application", "octet-stream"
+        if uploaded_file.type:
+            try:
+                maintype, subtype = uploaded_file.type.split("/", 1)
+            except ValueError:
+                pass
+        msg.add_attachment(
+            file_bytes,
+            maintype=maintype,
+            subtype=subtype,
+            filename=uploaded_file.name
+        )
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(from_email, password)
+        smtp.send_message(msg)
+
 
 
 
@@ -678,11 +767,19 @@ if menu == "Yeni Cari Kaydı":
             # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
             try:
                 yeni_cari_txt_olustur(new_row)
-                send_email_with_txt(
+                attachments = []
+                try:
+                    with open("yeni_cari.txt", "rb") as attachment_file:
+                        attachments.append(("yeni_cari.txt", attachment_file.read(), "text/plain"))
+                except FileNotFoundError:
+                    pass
+
+                send_email(
                     to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
                     subject="Yeni Cari Açılışı",
                     body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
-                    file_path="yeni_cari.txt"
+                    attachments=attachments,
+                    fallback_txt_path="yeni_cari.txt",
                 )
                 st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
             except Exception as e:
@@ -788,6 +885,83 @@ if menu == "Müşteri Portföyü":
         st.markdown("<div style='color:#b00020; font-weight:bold; font-size:1.1em;'>Kayıt bulunamadı.</div>", unsafe_allow_html=True)
     else:
         st.dataframe(table_df, use_container_width=True)
+
+        st.markdown("#### Toplu Mail Gönderimi")
+    with st.expander("Filtrelenmiş müşterilere toplu mail gönder", expanded=False):
+        email_pattern = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+        mevcut_epostalar = []
+        if "E-posta" in view_df.columns:
+            mevcut_epostalar = [
+                str(e).strip()
+                for e in view_df["E-posta"].dropna().tolist()
+                if str(e).strip()
+            ]
+
+        mevcut_epostalar = sorted({e for e in mevcut_epostalar if email_pattern.match(e)})
+
+        if not mevcut_epostalar:
+            st.info("Seçili filtrelere göre geçerli e-posta adresi bulunamadı.")
+        else:
+            with st.form("bulk_mail_form"):
+                secilen_adresler = st.multiselect(
+                    "Alıcıları seçin", mevcut_epostalar, help="Listelenen geçerli adreslerden seçim yapın."
+                )
+                ek_adresler = st.text_area(
+                    "Ek alıcılar", "", help="Virgül, satır sonu veya noktalı virgülle ayırabilirsiniz."
+                )
+                toplu_konu = st.text_input("Konu")
+                toplu_icerik = st.text_area("İçerik")
+                yuklenen_dosyalar = st.file_uploader(
+                    "Ekler", accept_multiple_files=True, help="E-posta eklerini buradan yükleyin."
+                )
+                gonder = st.form_submit_button("E-postayı Gönder")
+
+            if gonder:
+                tum_adresler = list(secilen_adresler)
+                if ek_adresler.strip():
+                    for parca in re.split(r"[\s,;]+", ek_adresler):
+                        aday = parca.strip()
+                        if aday and email_pattern.match(aday):
+                            tum_adresler.append(aday)
+
+                # Sıra koruyarak tekrarları kaldır
+                benzersiz_adresler = []
+                for adres in tum_adresler:
+                    if adres not in benzersiz_adresler:
+                        benzersiz_adresler.append(adres)
+
+                if not benzersiz_adresler:
+                    st.warning("Lütfen en az bir geçerli alıcı belirtin.")
+                elif not toplu_konu.strip():
+                    st.warning("Konu alanı boş bırakılamaz.")
+                else:
+                    ekler = []
+                    if yuklenen_dosyalar:
+                        for dosya in yuklenen_dosyalar:
+                            try:
+                                icerik = dosya.read()
+                            except Exception:
+                                icerik = dosya.getvalue()
+                            ekler.append(
+                                (
+                                    dosya.name,
+                                    icerik,
+                                    dosya.type or "application/octet-stream",
+                                )
+                            )
+
+                    try:
+                        send_email(
+                            to_email=benzersiz_adresler,
+                            subject=toplu_konu.strip(),
+                            body=toplu_icerik,
+                            attachments=ekler,
+                        )
+                    except Exception as e:
+                        st.error(f"E-posta gönderimi sırasında hata oluştu: {e}")
+                    else:
+                        st.success("E-postalar başarıyla gönderildi.")
+
 
     st.markdown("<h4 style='margin-top: 24px;'>Müşteri Düzenle / Sil</h4>", unsafe_allow_html=True)
 
@@ -902,11 +1076,19 @@ if menu == "Müşteri Portföyü":
 
                 try:
                     yeni_cari_txt_olustur(guncel_bilgiler)
-                    send_email_with_txt(
+                    attachments = []
+                    try:
+                        with open("yeni_cari.txt", "rb") as attachment_file:
+                            attachments.append(("yeni_cari.txt", attachment_file.read(), "text/plain"))
+                    except FileNotFoundError:
+                        pass
+
+                    send_email(
                         to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
                         subject="Güncel Cari Bilgisi",
                         body="Mevcut müşteri için güncel cari bilgileri ekte yer almaktadır.",
-                        file_path="yeni_cari.txt",
+                        attachments=attachments,
+                        fallback_txt_path="yeni_cari.txt",
                     )
                 except Exception as e:
                     st.warning(f"Muhasebeye gönderim sırasında bir hata oluştu: {e}")
@@ -2457,6 +2639,50 @@ if menu == "Fuar Kayıtları":
             st.markdown(f"<h4 style='color:#4776e6;'>{fuar_adi} – Kayıtlar</h4>", unsafe_allow_html=True)
 
             fuar_df = df_fuar_musteri[df_fuar_musteri["Fuar Adı"] == fuar_adi].copy()
+
+            with st.expander("Toplu E-posta Gönderimi", expanded=False):
+                email_list = extract_unique_emails(fuar_df.get("E-mail"))
+                if not email_list:
+                    st.info("Bu fuara ait kayıtlı e-posta adresi bulunamadı.")
+                else:
+                    multiselect_options = ["Tümünü seç"] + email_list
+                    selected_options = st.multiselect(
+                        "E-posta Adresleri",
+                        multiselect_options,
+                        key=f"bulk_mail_recipients_{fuar_adi}"
+                    )
+                    if "Tümünü seç" in selected_options:
+                        selected_recipients = email_list
+                    else:
+                        selected_recipients = selected_options
+
+                    subject = st.text_input("Konu", key=f"bulk_mail_subject_{fuar_adi}")
+                    body = st.text_area("E-posta İçeriği", key=f"bulk_mail_body_{fuar_adi}")
+                    attachments = st.file_uploader(
+                        "Ek Dosyalar",
+                        accept_multiple_files=True,
+                        key=f"bulk_mail_files_{fuar_adi}"
+                    )
+
+                    if st.button("Gönder", key=f"bulk_mail_send_{fuar_adi}"):
+                        if not selected_recipients:
+                            st.warning("Lütfen en az bir e-posta adresi seçin.")
+                        elif not subject.strip():
+                            st.warning("Lütfen e-posta konusu girin.")
+                        elif not body.strip():
+                            st.warning("Lütfen e-posta içeriği girin.")
+                        else:
+                            try:
+                                send_fair_bulk_email(
+                                    selected_recipients,
+                                    subject.strip(),
+                                    body,
+                                    attachments or []
+                                )
+                                st.success("E-postalar başarıyla gönderildi.")
+                            except Exception as exc:
+                                st.error(f"E-posta gönderilirken hata oluştu: {exc}")
+            
 
             # Hızlı filtreler
             col_fa, col_fb, col_fc = st.columns([1, 1, 1])
