@@ -117,6 +117,99 @@ EXCEL_FILE_ID    = "1C8OpNAIRySkWYTI9jBaboV-Rq85UbVD9"
 EVRAK_KLASOR_ID  = "14FTE1oSeIeJ6Y_7C0oQyZPKC8dK8hr1J"
 FIYAT_TEKLIFI_ID = "1TNjwx-xhmlxNRI3ggCJA7jaCAu9Lt_65"
 
+COUNTRY_LANGUAGE_MAP = {
+    "Türkiye": "tr",
+    "Amerika Birleşik Devletleri": "en",
+    "Birleşik Krallık": "en",
+    "Kanada": "en",
+    "Avustralya": "en",
+    "Almanya": "de",
+    "Avusturya": "de",
+    "İsviçre": "de",
+    "Fransa": "fr",
+    "Belçika": "fr",
+    "İspanya": "es",
+    "Meksika": "es",
+    "Kolombiya": "es",
+    "Arjantin": "es",
+    "Birleşik Arap Emirlikleri": "ar",
+    "Suudi Arabistan": "ar",
+    "Katar": "ar",
+    "Kuveyt": "ar",
+}
+
+FAIR_MAIL_TEMPLATES = {
+    "tr": {
+        "subject": "Fuar Görüşmemiz Hakkında",
+        "body": (
+            "Merhaba,\n\n"
+            "Fuarda standımızı ziyaret ettiğiniz için teşekkür ederiz. Sunduğumuz ürün ve"
+            " çözümler hakkında sorularınızı yanıtlamaktan memnuniyet duyarız."
+            "\n\n"
+            "İhtiyaçlarınızı daha iyi anlayabilmek ve iş birliği fırsatlarını görüşmek için"
+            " uygun olduğunuz bir zamanı paylaşmanızı rica ederiz.\n\n"
+            "Saygılarımızla,\nŞekeroğlu İhracat Ekibi"
+        ),
+    },
+    "en": {
+        "subject": "Thank You for Visiting Şekeroğlu at the Fair",
+        "body": (
+            "Hello,\n\n"
+            "Thank you for taking the time to meet with us during the trade fair. We would"
+            " be delighted to continue the conversation and share tailored solutions for"
+            " your business.\n\n"
+            "Please let us know a convenient time for a follow-up call or meeting so that"
+            " we can discuss the next steps together.\n\n"
+            "Best regards,\nŞekeroğlu Export Team"
+        ),
+    },
+    "de": {
+        "subject": "Vielen Dank für Ihren Besuch auf unserem Messestand",
+        "body": (
+            "Guten Tag,\n\n"
+            "herzlichen Dank für das Gespräch an unserem Stand. Gerne senden wir Ihnen"
+            " weitere Informationen zu unseren Produkten und prüfen gemeinsame"
+            " Geschäftsmöglichkeiten.\n\n"
+            "Teilen Sie uns bitte mit, wann wir Sie für ein kurzes Nachgespräch erreichen"
+            " können.\n\n"
+            "Mit freundlichen Grüßen\nŞekeroğlu Export Team"
+        ),
+    },
+    "fr": {
+        "subject": "Suite à notre rencontre sur le salon",
+        "body": (
+            "Bonjour,\n\n"
+            "Nous vous remercions d’avoir visité notre stand lors du salon. Nous serions"
+            " ravis de poursuivre nos échanges et de vous proposer des solutions adaptées"
+            " à vos besoins.\n\n"
+            "N’hésitez pas à nous indiquer vos disponibilités pour un échange complémentaire."
+            "\n\n"
+            "Cordialement,\nÉquipe Export Şekeroğlu"
+        ),
+    },
+    "es": {
+        "subject": "Seguimiento de nuestra reunión en la feria",
+        "body": (
+            "Hola,\n\n"
+            "Muchas gracias por visitarnos durante la feria. Queremos continuar la"
+            " conversación y presentarle nuestras soluciones ajustadas a sus necesidades."
+            "\n\n"
+            "Por favor, indíquenos cuándo podemos coordinar una reunión o llamada de"
+            " seguimiento.\n\n"
+            "Saludos cordiales,\nEquipo de Exportación Şekeroğlu"
+        ),
+    },
+    "ar": {
+        "subject": "متابعة بعد زيارتكم لجناحنا في المعرض",
+        "body": (
+            "مرحباً،\n\n"
+            "نشكر لكم زيارتكم لجناحنا خلال المعرض واهتمامكم بمنتجات شكر أوغلو. يسعدنا"
+            " تزويدكم بمعلومات إضافية وبحث فرص التعاون المشتركة.\n\n"
+            "يرجى تزويدنا بالوقت المناسب للتواصل معكم والحديث عن الخطوات القادمة.\n\n"
+            "مع أطيب التحيات،\nفريق تصدير شكر أوغلو"
+        ),
+    },
+}
 
 
 # --- LOGO (WEB LINKİNDEN AL) ---
@@ -3000,6 +3093,9 @@ if menu == "Fuar Kayıtları":
                         key=f"bulk_mail_recipients_{fuar_adi}"
                     )
                     
+                    attachments_key = f"bulk_mail_files_{fuar_adi}"
+                    attachments = st.session_state.get(attachments_key)
+
                     image_previews = []
                     inline_cid_map = {}
                     if attachments:
@@ -3022,26 +3118,85 @@ if menu == "Fuar Kayıtları":
                                 image_cid_state[attachment_key] = cid
                             image_previews.append((uploaded_file.name, cid, attachment_key))
                             inline_cid_map[attachment_key] = cid
+                            st.code(f'<img src="cid:{cid_value}" alt="{file_name}">', language="html")
 
                     if image_previews:
                         st.markdown("**HTML gövdesine eklenecek görseller:**")
                         for file_name, cid, _ in image_previews:
                             cid_value = cid.strip("<>")
-                            st.code(f'<img src="cid:{cid_value}" alt="{file_name}">', language="html")                    
+                 
                     if "Tümünü seç" in selected_options:
                         selected_recipients = email_list
                     else:
                         selected_recipients = selected_options
 
-                    subject = st.text_input("Konu", key=f"bulk_mail_subject_{fuar_adi}")
-                    body = st.text_area("E-posta İçeriği", key=f"bulk_mail_body_{fuar_adi}")
+                   
                     
-                    attachments = st.file_uploader(
-                        "Ek Dosyalar",
-                        accept_multiple_files=True,
-                        key=f"bulk_mail_files_{fuar_adi}"
+                    available_countries = sorted({
+                        str(country).strip()
+                        for country in fuar_df.get("Ülke", [])
+                        if str(country).strip()
+                    })
+                    country_options = ["— Ülke Seçiniz —"] + available_countries
+                    selected_country = st.selectbox(
+                        "Ülke Seçiniz",
+                        country_options,
+                        key=f"bulk_mail_country_{fuar_adi}"
+                    )
+                    selected_country = (
+                        "" if selected_country == "— Ülke Seçiniz —" else selected_country
                     )
 
+                    subject_key = f"bulk_mail_subject_{fuar_adi}"
+                    body_key = f"bulk_mail_body_{fuar_adi}"
+                    template_key = f"{subject_key}_last_template"
+                    language_key = f"{subject_key}_language"
+
+                    st.session_state.setdefault(subject_key, "")
+                    st.session_state.setdefault(body_key, "")
+
+                    prev_language = st.session_state.get(language_key)
+                    last_template = st.session_state.get(template_key)
+
+                    language = COUNTRY_LANGUAGE_MAP.get(selected_country) if selected_country else None
+                    template = FAIR_MAIL_TEMPLATES.get(language) if language else None
+
+                    if prev_language != language and template:
+                        last_template_subject = ""
+                        last_template_body = ""
+                        if isinstance(last_template, tuple) and len(last_template) == 3:
+                            last_template_subject = last_template[1] or ""
+                            last_template_body = last_template[2] or ""
+
+                        current_subject = st.session_state.get(subject_key, "")
+                        current_body = st.session_state.get(body_key, "")
+
+                        if (not current_subject) or (current_subject == last_template_subject):
+                            st.session_state[subject_key] = template.get("subject", "")
+
+                        if (not current_body) or (current_body == last_template_body):
+                            st.session_state[body_key] = template.get("body", "")
+
+                        st.session_state[template_key] = (
+                            language,
+                            template.get("subject", ""),
+                            template.get("body", ""),
+                        )
+
+                    if prev_language != language:
+                        st.session_state[language_key] = language
+
+                    subject = st.text_input("Konu", key=subject_key)
+                    body = st.text_area("E-posta İçeriği", key=body_key)
+
+                    st.file_uploader(
+                        "Ek Dosyalar",
+                        accept_multiple_files=True,
+                        key=attachments_key,
+                    )
+
+                    attachments = st.session_state.get(attachments_key)
+                    
                     if st.button("Gönder", key=f"bulk_mail_send_{fuar_adi}"):
                         if not selected_recipients:
                             st.warning("Lütfen en az bir e-posta adresi seçin.")
