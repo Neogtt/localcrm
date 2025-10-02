@@ -211,6 +211,249 @@ FAIR_MAIL_TEMPLATES = {
     },
 }
 
+HOLIDAY_MAIL_TEMPLATES = {
+    "Ramazan Bayramı": {
+        "tr": {
+            "subject": "Ramazan Bayramınız Kutlu Olsun",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
+                " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
+                " günler temenni ederiz.</p>"
+                "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy Eid al-Fitr",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you"
+                " for your trust and cooperation.</p>"
+                "<p>Best regards,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Zuckerfest",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>wir wünschen Ihnen und Ihren Liebsten ein gesegnetes und"
+                " erfolgreiches Zuckerfest. Vielen Dank für die vertrauensvolle"
+                " Zusammenarbeit.</p>"
+                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne fête de l’Aïd al-Fitr",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Nous vous souhaitons une fête de l’Aïd al-Fitr pleine de joie et de"
+                " prospérité. Merci pour votre confiance et votre collaboration.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Eid al-Fitr",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Le deseamos un Eid al-Fitr lleno de alegría y prosperidad. Gracias"
+                " por su confianza y cooperación.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "عيد فطر سعيد",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نهنئكم بعيد الفطر المبارك ونتمنى لكم ولعائلتكم أياماً مليئة"
+                " بالخير والنجاح. نشكركم على ثقتكم وشراكتكم المستمرة.</p>"
+                "<p>مع أطيب التحيات،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+    "Kurban Bayramı": {
+        "tr": {
+            "subject": "Kurban Bayramınız Kutlu Olsun",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne"
+                " kadar gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
+                "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy Eid al-Adha",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>May this Eid al-Adha bring peace, happiness, and success to you and"
+                " your loved ones. Thank you for your continued cooperation.</p>"
+                "<p>Sincerely,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Opferfest",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>möge das Opferfest Ihnen und Ihrem Team Frieden, Gesundheit und"
+                " Erfolg bringen. Wir danken Ihnen für die gute Zusammenarbeit.</p>"
+                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne fête de l’Aïd al-Adha",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Que cette fête de l’Aïd al-Adha vous apporte paix, bonheur et"
+                " réussite. Merci pour votre collaboration précieuse.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Eid al-Adha",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Que este Eid al-Adha le traiga paz, felicidad y éxito a usted y a"
+                " su equipo. Gracias por su apoyo continuo.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "عيد أضحى مبارك",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نتمنى أن يحمل لكم عيد الأضحى المبارك السلام والسعادة والنجاح،"
+                " ونشكركم على تعاونكم المستمر.</p>"
+                "<p>مع خالص التقدير،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+    "Yeni Yıl": {
+        "tr": {
+            "subject": "Mutlu Yıllar",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür"
+                " ederiz. Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı"
+                " getirmesini dileriz.</p>"
+                "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy New Year",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>Thank you for the trust and partnership throughout the past year. We"
+                " wish you and your team a healthy and prosperous New Year.</p>"
+                "<p>Warm regards,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Neues Jahr",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>vielen Dank für Ihre Unterstützung im vergangenen Jahr. Wir wünschen"
+                " Ihnen und Ihrem Team ein gesundes und erfolgreiches neues Jahr.</p>"
+                "<p>Mit besten Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne année",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Merci pour votre confiance tout au long de l’année écoulée. Nous vous"
+                " souhaitons, à vous et à votre équipe, une nouvelle année pleine de"
+                " santé et de réussite.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Año Nuevo",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Gracias por su confianza y colaboración durante el último año. Les"
+                " deseamos a usted y a su equipo un Año Nuevo lleno de salud y"
+                " prosperidad.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "سنة جديدة سعيدة",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نشكر لكم ثقتكم وشراكتكم طوال العام الماضي، ونتمنى لكم ولفريقكم"
+                " عاماً جديداً مليئاً بالصحة والنجاح.</p>"
+                "<p>مع أطيب الأمنيات،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+}
+
+HOLIDAY_FALLBACK_TEMPLATES = {
+    "Ramazan Bayramı": {
+        "subject": "Ramazan Bayramınız Kutlu Olsun / Happy Eid al-Fitr",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
+            " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
+            " günler temenni ederiz.</p>"
+            "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you for"
+            " your trust and cooperation.</p>"
+            "<p>Best regards,<br>Sekeroğlu Group</p>"
+        ),
+    },
+    "Kurban Bayramı": {
+        "subject": "Kurban Bayramınız Kutlu Olsun / Happy Eid al-Adha",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne kadar"
+            " gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
+            "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>May this Eid al-Adha bring peace, happiness and success to you and your"
+            " loved ones.</p>"
+            "<p>Sincerely,<br>Sekeroğlu Group</p>"
+        ),
+    },
+    "Yeni Yıl": {
+        "subject": "Mutlu Yıllar / Happy New Year",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür ederiz."
+            " Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı getirmesini dileriz.</p>"
+            "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>Thank you for the trust and partnership throughout the past year. Wishing"
+            " you a healthy and prosperous New Year.</p>"
+            "<p>Warm regards,<br>Sekeroğlu Group</p>"
+        ),
+    },
+}
+
+LANGUAGE_LABELS = {
+    "tr": "Türkçe",
+    "en": "English",
+    "de": "Deutsch",
+    "fr": "Français",
+    "es": "Español",
+    "ar": "العربية",
+}
+
+
+def get_holiday_template_content(template_name, language_code):
+    template = HOLIDAY_MAIL_TEMPLATES.get(template_name, {})
+    content = template.get(language_code)
+    if content:
+        return content, False
+    fallback = HOLIDAY_FALLBACK_TEMPLATES.get(template_name)
+    if fallback:
+        return fallback, True
+    return None, False
+
+
 
 # --- LOGO (WEB LINKİNDEN AL) ---
 logo_url = "https://www.sekeroglugroup.com/storage/settings/xdp5r6DZIFJMNGOStqwvKCiVHDhYxA84jFr61TNp.svg"
@@ -1559,67 +1802,12 @@ if menu == "Etkileşim Günlüğü":
         else:
             st.caption(f"Toplam benzersiz e-posta: {len(tum_epostalar)}")
 
-        varsayilan_sablonlar = {
-            "Ramazan Bayramı": {
-                "subject": "Ramazan Bayramınız Kutlu Olsun / Happy Eid al-Fitr",
-                "body": (
-                    "<p>Değerli iş ortağımız,</p>"
-                    "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız."
-                    " İş birliğimizin artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu günler temenni ederiz.</p>"
-                    "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
-                    "<hr>"
-                    "<p>Dear business partner,</p>"
-                    "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr."
-                    " Thank you for your trust and cooperation.</p>"
-                    "<p>Best regards,<br>Sekeroğlu Group</p>"
-                ),
-            },
-            "Kurban Bayramı": {
-                "subject": "Kurban Bayramınız Kutlu Olsun / Happy Eid al-Adha",
-                "body": (
-                    "<p>Değerli iş ortağımız,</p>"
-                    "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler,"
-                    " bugüne kadar gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
-                    "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
-                    "<hr>"
-                    "<p>Dear business partner,</p>"
-                    "<p>May this Eid al-Adha bring peace, happiness and success to you and your loved ones.</p>"
-                    "<p>Sincerely,<br>Sekeroğlu Group</p>"
-                ),
-            },
-            "Yeni Yıl": {
-                "subject": "Mutlu Yıllar / Happy New Year",
-                "body": (
-                    "<p>Değerli iş ortağımız,</p>"
-                    "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür ederiz."
-                    " Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı getirmesini dileriz.</p>"
-                    "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
-                    "<hr>"
-                    "<p>Dear business partner,</p>"
-                    "<p>Thank you for the trust and partnership throughout the past year."
-                    " Wishing you a healthy and prosperous New Year.</p>"
-                    "<p>Warm regards,<br>Sekeroğlu Group</p>"
-                ),
-            },
-        }
-
-        if "bulk_mail_subject" not in st.session_state:
-            st.session_state["bulk_mail_subject"] = ""
-        if "bulk_mail_body" not in st.session_state:
-            st.session_state["bulk_mail_body"] = ""
-        if "bulk_mail_template_applied" not in st.session_state:
-            st.session_state["bulk_mail_template_applied"] = None
-
-        sablon_adlari = ["(Şablon seçiniz)"] + list(varsayilan_sablonlar.keys())
-        secilen_sablon = st.selectbox("Şablon", sablon_adlari, index=0)
-        if secilen_sablon != "(Şablon seçiniz)":
-            if st.session_state.get("bulk_mail_template_applied") != secilen_sablon:
-                st.session_state["bulk_mail_subject"] = varsayilan_sablonlar[secilen_sablon]["subject"]
-                st.session_state["bulk_mail_body"] = varsayilan_sablonlar[secilen_sablon]["body"]
-                st.session_state["bulk_mail_template_applied"] = secilen_sablon
-        else:
-            st.session_state["bulk_mail_template_applied"] = None
-
+        st.session_state.setdefault("bulk_mail_subject", "")
+        st.session_state.setdefault("bulk_mail_body", "")
+        st.session_state.setdefault("bulk_mail_template_info", None)
+        st.session_state.setdefault("holiday_selected_template", "(Şablon seçiniz)")
+        st.session_state.setdefault("holiday_selected_language", None)
+        
         secili_ulkeler = st.multiselect(
             "Ülke filtresi",
             tum_ulkeler,
@@ -1651,6 +1839,100 @@ if menu == "Etkileşim Günlüğü":
             secilen_epostalar = filtrelenmis_epostalar
         else:
             secilen_epostalar = secilen_epostalar_raw
+
+        derived_languages = sorted({
+            COUNTRY_LANGUAGE_MAP.get(country)
+            for country in secili_ulkeler_kumesi
+            if country != unknown_country_label and COUNTRY_LANGUAGE_MAP.get(country)
+        })
+
+        template_placeholder = "(Şablon seçiniz)"
+        template_options = [template_placeholder] + list(HOLIDAY_MAIL_TEMPLATES.keys())
+        if st.session_state["holiday_selected_template"] not in template_options:
+            st.session_state["holiday_selected_template"] = template_placeholder
+
+        secilen_sablon = st.selectbox(
+            "Şablon",
+            template_options,
+            key="holiday_selected_template",
+        )
+
+        secilen_dil = None
+        fallback_kullanildi = False
+        if secilen_sablon != template_placeholder:
+            sablon_dilleri = sorted(HOLIDAY_MAIL_TEMPLATES.get(secilen_sablon, {}).keys())
+            aday_diller = [lang for lang in sablon_dilleri if lang in derived_languages]
+            if not aday_diller:
+                aday_diller = sablon_dilleri
+
+            if len(aday_diller) == 1:
+                secilen_dil = aday_diller[0]
+                st.session_state["holiday_selected_language"] = secilen_dil
+                st.caption(
+                    f"Seçilen ülkelere göre dil otomatik olarak {LANGUAGE_LABELS.get(secilen_dil, secilen_dil)} olarak belirlendi."
+                )
+            else:
+                onceki_dil = st.session_state.get("holiday_selected_language")
+                varsayilan_dil = None
+                if derived_languages:
+                    for dil in derived_languages:
+                        if dil in aday_diller:
+                            varsayilan_dil = dil
+                            break
+                if varsayilan_dil is None:
+                    varsayilan_dil = aday_diller[0] if aday_diller else None
+                if onceki_dil not in aday_diller:
+                    st.session_state["holiday_selected_language"] = varsayilan_dil
+
+                secilen_dil = st.selectbox(
+                    "Dil",
+                    aday_diller,
+                    format_func=lambda lang: LANGUAGE_LABELS.get(lang, lang.upper()),
+                    key="holiday_selected_language",
+                )
+
+            if secilen_dil:
+                mevcut_info = st.session_state.get("bulk_mail_template_info")
+                onceki_konu = st.session_state.get("bulk_mail_subject", "")
+                onceki_govde = st.session_state.get("bulk_mail_body", "")
+                mevcut_sablon_adi = mevcut_info["name"] if mevcut_info else None
+                mevcut_sablon_dili = mevcut_info["language"] if mevcut_info else None
+                alanlar_bos = not onceki_konu.strip() and not onceki_govde.strip()
+                alanlar_mevcut_sablona_esit = bool(
+                    mevcut_info
+                    and onceki_konu == mevcut_info.get("subject", "")
+                    and onceki_govde == mevcut_info.get("body", "")
+                )
+
+                yeni_icerik, fallback_kullanildi = get_holiday_template_content(secilen_sablon, secilen_dil)
+                if yeni_icerik:
+                    sablon_degisti = (
+                        mevcut_sablon_adi != secilen_sablon
+                        or mevcut_sablon_dili != secilen_dil
+                    )
+                    manuel_duzenleme = bool(mevcut_info and not alanlar_mevcut_sablona_esit)
+
+                    sablon_yuklenecek = False
+                    if alanlar_bos:
+                        sablon_yuklenecek = True
+                    elif sablon_degisti and not manuel_duzenleme:
+                        sablon_yuklenecek = True
+                    elif not sablon_degisti and alanlar_mevcut_sablona_esit:
+                        sablon_yuklenecek = True
+
+                    if sablon_yuklenecek:
+                        st.session_state["bulk_mail_subject"] = yeni_icerik["subject"]
+                        st.session_state["bulk_mail_body"] = yeni_icerik["body"]
+                        st.session_state["bulk_mail_template_info"] = {
+                            "name": secilen_sablon,
+                            "language": secilen_dil,
+                            "subject": yeni_icerik["subject"],
+                            "body": yeni_icerik["body"],
+                            "fallback": fallback_kullanildi,
+                        }
+        else:
+            st.session_state["holiday_selected_language"] = None
+
 
         konu = st.text_input("E-posta Konusu", key="bulk_mail_subject")
         govde = st.text_area(
