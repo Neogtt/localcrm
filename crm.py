@@ -2658,6 +2658,11 @@ if menu == "Fuar Kayıtları":
 
                     subject = st.text_input("Konu", key=f"bulk_mail_subject_{fuar_adi}")
                     body = st.text_area("E-posta İçeriği", key=f"bulk_mail_body_{fuar_adi}")
+                    signature_input = st.text_area(
+                        "E-posta İmzası",
+                        key=f"bulk_mail_signature_{fuar_adi}",
+                        help="İmzayı eklemek istemezseniz boş bırakabilirsiniz."
+                    )
                     attachments = st.file_uploader(
                         "Ek Dosyalar",
                         accept_multiple_files=True,
@@ -2672,11 +2677,13 @@ if menu == "Fuar Kayıtları":
                         elif not body.strip():
                             st.warning("Lütfen e-posta içeriği girin.")
                         else:
+                            signature = signature_input.strip()
+                            final_body = f"{body}\n\n{signature}" if signature else body
                             try:
                                 send_fair_bulk_email(
                                     selected_recipients,
                                     subject.strip(),
-                                    body,
+                                    final_body,
                                     attachments or []
                                 )
                                 st.success("E-postalar başarıyla gönderildi.")
