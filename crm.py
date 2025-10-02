@@ -6,8 +6,11 @@ import io, os, datetime, tempfile, re, json, time, uuid, html
 import numpy as np
 import smtplib
 from email.message import EmailMessage
+from email.utils import make_msgid
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
+
+EMBED_IMAGES = True
 
 CURRENCY_SYMBOLS = ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]
 
@@ -467,12 +470,15 @@ def extract_unique_emails(email_series: pd.Series) -> list:
     return sorted(seen.values(), key=lambda x: x.lower())
 
 
-def send_fair_bulk_email(to_emails, subject, body, attachments=None):
+def send_fair_bulk_email(to_emails, subject, body, attachments=None, embed_images=None, inline_cid_map=None):
     if not to_emails:
         raise ValueError("E-posta alıcı listesi boş olamaz.")
 
     from_email = "todo@sekeroglugroup.com"
     password = "vbgvforwwbcpzhxf"
+
+    embed_images = EMBED_IMAGES if embed_images is None else bool(embed_images)
+    inline_cid_map = inline_cid_map or {}
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -487,35 +493,98 @@ def send_fair_bulk_email(to_emails, subject, body, attachments=None):
     msg.set_content(plain_body)
 
     escaped_body = html.escape(body_text).replace("\n", "<br>") if body_text else ""
-    html_body = (
-        "<div style='font-family:Arial,sans-serif;color:#333333;'>"
-        f"{escaped_body}"
-        "</div>"
-        f"<div style='margin-top:16px;'>{html_signature()}</div>"
-    )
-    msg.add_alternative(html_body, subtype="html")
 
     attachments = attachments or []
+    inline_images = []
+    download_errors = []
+    other_attachments = []
+    
     for uploaded_file in attachments:
         if uploaded_file is None:
             continue
-        file_bytes = uploaded_file.getvalue()
+        try:
+            file_bytes = uploaded_file.getvalue()
+        except Exception as exc:
+            download_errors.append(f"{getattr(uploaded_file, 'name', 'Dosya')} okunamadı: {exc}")
+            continue
+
         maintype, subtype = "application", "octet-stream"
-        if uploaded_file.type:
+        mime_type = uploaded_file.type or ""
+        if mime_type:
             try:
-                maintype, subtype = uploaded_file.type.split("/", 1)
+                maintype, subtype = mime_type.split("/", 1)
             except ValueError:
-                pass
-        msg.add_attachment(
-            file_bytes,
-            maintype=maintype,
-            subtype=subtype,
-            filename=uploaded_file.name
+                maintype, subtype = mime_type, "octet-stream"
+
+        attachment_key = f"{uploaded_file.name}:{len(file_bytes)}"
+
+        if embed_images and maintype == "image":
+            cid = make_msgid()
+            cid = inline_cid_map.get(attachment_key, cid)
+            inline_images.append({
+                "data": file_bytes,
+                "maintype": maintype,
+                "subtype": subtype,
+                "filename": uploaded_file.name,
+                "cid": cid,
+                "key": attachment_key,
+            })
+        else:
+            other_attachments.append({
+                "data": file_bytes,
+                "maintype": maintype,
+                "subtype": subtype,
+                "filename": uploaded_file.name,
+            })
+
+    if download_errors:
+        raise RuntimeError("; ".join(download_errors))
+
+    image_blocks = []
+    if embed_images and inline_images:
+        for image in inline_images:
+            cid_clean = image["cid"].strip("<>")
+            alt_text = html.escape(image["filename"]) if image["filename"] else "Görsel"
+            image_blocks.append(
+                "<div style='margin-top:12px; text-align:center;'>"
+                f"<img src=\"cid:{cid_clean}\" alt=\"{alt_text}\" style='max-width:100%; height:auto;'>"
+                "</div>"
+            )
+
+    html_sections = ["<div style='font-family:Arial,sans-serif;color:#333333;'>"]
+    if escaped_body:
+        html_sections.append(escaped_body)
+    if image_blocks:
+        html_sections.extend(image_blocks)
+    html_sections.append("</div>")
+    html_sections.append(f"<div style='margin-top:16px;'>{html_signature()}</div>")
+    html_body = "".join(html_sections)
+
+    html_part = msg.add_alternative(html_body, subtype="html")
+
+    for image in inline_images:
+        html_part.add_related(
+            image["data"],
+            maintype=image["maintype"],
+            subtype=image["subtype"],
+            cid=image["cid"],
+            filename=image["filename"] or None,
         )
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(from_email, password)
-        smtp.send_message(msg)
+    for attachment in other_attachments:
+        msg.add_attachment(
+            attachment["data"],
+            maintype=attachment["maintype"],
+            subtype=attachment["subtype"],
+            filename=attachment["filename"],
+        )
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(from_email, password)
+            smtp.send_message(msg)
+    except smtplib.SMTPException as exc:
+        raise RuntimeError(f"SMTP hatası: {exc}") from exc
 
 
 
@@ -2930,6 +2999,35 @@ if menu == "Fuar Kayıtları":
                         multiselect_options,
                         key=f"bulk_mail_recipients_{fuar_adi}"
                     )
+                    
+                    image_previews = []
+                    inline_cid_map = {}
+                    if attachments:
+                        image_cid_state = st.session_state.setdefault("bulk_mail_image_cids", {})
+                        for uploaded_file in attachments:
+                            if uploaded_file is None:
+                                continue
+                            mime_type = uploaded_file.type or ""
+                            if not mime_type.startswith("image/"):
+                                continue
+                            try:
+                                file_bytes = uploaded_file.getvalue()
+                            except Exception as exc:
+                                st.error(f"{uploaded_file.name} okunurken hata oluştu: {exc}")
+                                continue
+                            attachment_key = f"{uploaded_file.name}:{len(file_bytes)}"
+                            cid = image_cid_state.get(attachment_key)
+                            if not cid:
+                                cid = make_msgid()
+                                image_cid_state[attachment_key] = cid
+                            image_previews.append((uploaded_file.name, cid, attachment_key))
+                            inline_cid_map[attachment_key] = cid
+
+                    if image_previews:
+                        st.markdown("**HTML gövdesine eklenecek görseller:**")
+                        for file_name, cid, _ in image_previews:
+                            cid_value = cid.strip("<>")
+                            st.code(f'<img src="cid:{cid_value}" alt="{file_name}">', language="html")                    
                     if "Tümünü seç" in selected_options:
                         selected_recipients = email_list
                     else:
@@ -2958,8 +3056,11 @@ if menu == "Fuar Kayıtları":
                                     selected_recipients,
                                     subject.strip(),
                                     body,
-                                    attachments or []
+                                    attachments or [],
+                                    embed_images=EMBED_IMAGES,
+                                    inline_cid_map=inline_cid_map
                                 )
+                        
                                 st.success("E-postalar başarıyla gönderildi.")
                             except Exception as exc:
                                 st.error(f"E-posta gönderilirken hata oluştu: {exc}")
