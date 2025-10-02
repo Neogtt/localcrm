@@ -2695,11 +2695,15 @@ if menu == "Fuar Kayıtları":
 
             # Tip dönüşümleri ve filtre uygula
             fuar_df["Görüşme Kalitesi"] = pd.to_numeric(fuar_df["Görüşme Kalitesi"], errors="coerce")
-            fuar_df["Tarih"] = pd.to_datetime(fuar_df["Tarih"], errors="coerce")
+            fuar_df["Tarih"] = pd.to_datetime(fuar_df["Tarih"], errors="coerce").dt.normalize()
+
+            tarih_bas_ts = pd.Timestamp(tarih_bas).normalize()
+            tarih_bit_ts = pd.Timestamp(tarih_bit).normalize()
+
             mask = (
                 (fuar_df["Görüşme Kalitesi"].fillna(0) >= min_puan) &
-                (fuar_df["Tarih"].dt.date >= tarih_bas) &
-                (fuar_df["Tarih"].dt.date <= tarih_bit)
+                (fuar_df["Tarih"] >= tarih_bas_ts) &
+                (fuar_df["Tarih"] <= tarih_bit_ts)
             )
             fuar_df = fuar_df[mask].copy().sort_values("Tarih", ascending=False)
 
