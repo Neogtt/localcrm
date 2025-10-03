@@ -1102,14 +1102,16 @@ if menu == "Genel Bakış":
         st.dataframe(bekleyen_proformalar[["Müşteri Adı", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
 
     # ---- Sevk Bekleyen Siparişler ----
-    st.markdown("### Sevk Bekleyen Siparişler")
+
     if "Sevk Durumu" not in df_proforma.columns:
         df_proforma["Sevk Durumu"] = ""
     if "Ülke" not in df_proforma.columns:
         df_proforma["Ülke"] = ""
     if "Termin Tarihi" not in df_proforma.columns:
-        df_proforma["Termin Tarihi"] = ""        
+        df_proforma["Termin Tarihi"] = ""     
     sevk_bekleyenler = df_proforma[(df_proforma["Durum"] == "Siparişe Dönüştü") & (~df_proforma["Sevk Durumu"].isin(["Sevkedildi", "Ulaşıldı"]))] if "Durum" in df_proforma.columns else pd.DataFrame()
+    sevk_bekleyen_sayisi = len(sevk_bekleyenler)
+    st.markdown(f"### Sevk Bekleyen Siparişler ({sevk_bekleyen_sayisi} Adet)")
     try:
         toplam_siparis = pd.to_numeric(sevk_bekleyenler["Tutar"], errors="coerce").sum()
     except:
@@ -2616,11 +2618,15 @@ elif menu == "Sipariş Operasyonları":
     siparisler = siparisler.sort_values(["Termin Tarihi Order","Tarih"], ascending=[True, True])
 
     # ---- Görünüm için format
+    siparis_sayisi = len(siparisler)
     g = siparisler.copy()
     g["Tarih"] = g["Tarih"].dt.strftime("%d/%m/%Y")
     g["Termin Tarihi"] = pd.to_datetime(g["Termin Tarihi"], errors="coerce").dt.strftime("%d/%m/%Y")
 
-    st.markdown("<h4 style='color:#219A41; font-weight:bold;'>Tüm Siparişe Dönüşenler</h4>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h4 style='color:#219A41; font-weight:bold;'>Tüm Siparişe Dönüşenler ({siparis_sayisi} Adet)</h4>",
+        unsafe_allow_html=True,
+    )
     goruntulenecek_kolonlar = [
         "Tarih",
         "Müşteri Adı",
