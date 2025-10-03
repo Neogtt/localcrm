@@ -1154,8 +1154,45 @@ if menu == "Genel Bakış":
     if eta_yolda.empty:
         st.info("Yolda olan (sevk edilmiş) sipariş yok.")
     else:
-        st.dataframe(eta_yolda[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+        eta_display = eta_yolda.copy()
+        eta_display["Proforma No"] = eta_display["Proforma No"].astype(str)
 
+        if not df_eta.empty:
+            eta_lookup = df_eta.copy()
+            eta_lookup["Proforma No"] = eta_lookup["Proforma No"].astype(str)
+            eta_lookup = eta_lookup.sort_values(by="ETA Tarihi", kind="stable")
+            eta_lookup = eta_lookup.drop_duplicates(subset=["Proforma No"], keep="last")
+            eta_display = eta_display.merge(
+                eta_lookup[["Proforma No", "ETA Tarihi"]],
+                on="Proforma No",
+                how="left",
+            )
+        else:
+            eta_display["ETA Tarihi"] = pd.NaT
+
+        eta_display["ETA Tarihi"] = pd.to_datetime(eta_display["ETA Tarihi"], errors="coerce")
+        eta_display = eta_display.sort_values(
+            by="ETA Tarihi",
+            ascending=True,
+            na_position="last",
+            kind="stable",
+        )
+        eta_display["ETA Tarihi"] = eta_display["ETA Tarihi"].dt.strftime("%d/%m/%Y")
+        eta_display["ETA Tarihi"] = eta_display["ETA Tarihi"].fillna("").replace({"NaT": ""})
+
+        st.dataframe(
+            eta_display[[
+                "Müşteri Adı",
+                "Ülke",
+                "Proforma No",
+                "Tarih",
+                "ETA Tarihi",
+                "Tutar",
+                "Vade (gün)",
+                "Açıklama",
+            ]],
+            use_container_width=True,
+        )      
     # ---- Son Teslim Edilen Siparişler ----
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
