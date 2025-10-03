@@ -736,7 +736,18 @@ def send_email(to_email, subject, body, attachments=None, fallback_txt_path=None
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = ", ".join(to_email)  # Birden fazla alıcıyı virgülle ayırarak ekliyoruz
+
+    
+    if isinstance(to_email, (str, bytes)):
+        recipients = [to_email.decode() if isinstance(to_email, bytes) else to_email]
+    else:
+        recipients = [addr for addr in to_email if addr]
+
+    if not recipients:
+        raise ValueError("En az bir geçerli alıcı e-posta adresi sağlanmalıdır.")
+
+    msg["To"] = from_email
+    msg["Bcc"] = ", ".join(recipients)
     msg.set_content(body)
 
     prepared_attachments = attachments or []
