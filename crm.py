@@ -7,6 +7,7 @@ import numpy as np
 import smtplib
 from email.message import EmailMessage
 from email.utils import make_msgid
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
 
@@ -3831,6 +3832,39 @@ elif menu == "Satış Analitiği":
     else:
         st.info("Seçilen tarih aralığında müşteri bazlı ciro bilgisi bulunamadı.")
 
+    if "Müşteri Adı" in df_range.columns and not df_range.empty:
+        st.markdown(
+            "<h3 style='margin-top:20px; color:#185a9d;'>Müşteri Bazında Ciro Yüzdeleri</h3>",
+            unsafe_allow_html=True,
+        )
+
+        pie_df = df_range.copy()
+        pie_df["Müşteri Adı"] = pie_df["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
+        pie_summary = (
+            pie_df.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .reset_index()
+            .sort_values("Tutar_num", ascending=False)
+        )
+
+        if not pie_summary.empty:
+            fig, ax = plt.subplots(figsize=(6, 6))
+            wedges, texts, autotexts = ax.pie(
+                pie_summary["Tutar_num"],
+                labels=pie_summary["Müşteri Adı"],
+                autopct=lambda pct: f"{pct:.1f}%" if pct > 0 else "",
+                startangle=90,
+            )
+            ax.axis("equal")
+
+            for autotext in autotexts:
+                autotext.set_color("white")
+                autotext.set_fontsize(9)
+
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
 
     # ---- Detay tablo ----
     detail_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
