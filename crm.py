@@ -7,7 +7,7 @@ import numpy as np
 import smtplib
 from email.message import EmailMessage
 from email.utils import make_msgid
-import matplotlib.pyplot as plt
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
 
@@ -3848,21 +3848,95 @@ elif menu == "Satış Analitiği":
         )
 
         if not pie_summary.empty:
-            fig, ax = plt.subplots(figsize=(6, 6))
-            wedges, texts, autotexts = ax.pie(
-                pie_summary["Tutar_num"],
-                labels=pie_summary["Müşteri Adı"],
-                autopct=lambda pct: f"{pct:.1f}%" if pct > 0 else "",
-                startangle=90,
-            )
-            ax.axis("equal")
+            total_value = float(pie_summary["Tutar_num"].sum())
+            labels = pie_summary["Müşteri Adı"].tolist()
+            values = [float(v) for v in pie_summary["Tutar_num"].tolist()]
 
-            for autotext in autotexts:
-                autotext.set_color("white")
-                autotext.set_fontsize(9)
+            if total_value <= 0:
+                st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
+            else:
+                percentages = [
+                    round((value / total_value) * 100, 1) if total_value else 0 for value in values
+                ]
+                legend_labels = [f"{label} (%{pct:.1f})" for label, pct in zip(labels, percentages)]
 
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
+                base_colors = [
+                    "#3366CC",
+                    "#DC3912",
+                    "#FF9900",
+                    "#109618",
+                    "#990099",
+                    "#0099C6",
+                    "#DD4477",
+                    "#66AA00",
+                    "#B82E2E",
+                    "#316395",
+                    "#994499",
+                    "#22AA99",
+                    "#AAAA11",
+                    "#6633CC",
+                    "#E67300",
+                    "#8B0707",
+                    "#651067",
+                    "#329262",
+                    "#5574A6",
+                    "#3B3EAC",
+                ]
+                colors = [base_colors[i % len(base_colors)] for i in range(len(values))]
+
+                chart_id = f"customer_pie_{uuid.uuid4().hex}"
+                chart_height = 420
+                chart_data = {
+                    "labels": legend_labels,
+                    "datasets": [
+                        {
+                            "data": values,
+                            "backgroundColor": colors,
+                            "borderWidth": 0,
+                        }
+                    ],
+                }
+                chart_options = {
+                    "plugins": {
+                        "legend": {
+                            "position": "right",
+                            "labels": {"boxWidth": 18, "font": {"size": 12}},
+                        }
+                    }
+                }
+
+                chart_html = f"""
+                <div style="position:relative; min-height:{chart_height}px;">
+                    <canvas id="{chart_id}" height="{chart_height}"></canvas>
+                </div>
+                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                <script>
+                    const ctx = document.getElementById('{chart_id}').getContext('2d');
+                    if (window.customerPieCharts === undefined) {{
+                        window.customerPieCharts = {{}};
+                    }}
+                    if (window.customerPieCharts['{chart_id}']) {{
+                        window.customerPieCharts['{chart_id}'].destroy();
+                    }}
+                    const chartOptions = {json.dumps(chart_options)};
+                    chartOptions.plugins.tooltip = chartOptions.plugins.tooltip || {{}};
+                    chartOptions.plugins.tooltip.callbacks = chartOptions.plugins.tooltip.callbacks || {{}};
+                    chartOptions.plugins.tooltip.callbacks.label = function(context) {{
+                        const value = context.parsed;
+                        const total = {round(total_value, 2)};
+                        const percentage = total ? ((value / total) * 100).toFixed(1) : 0;
+                        const formatter = new Intl.NumberFormat('tr-TR', {{ style: 'decimal', maximumFractionDigits: 2 }});
+                        return context.label + ': ' + formatter.format(value) + ' USD (%' + percentage + ')';
+                    }};
+                    window.customerPieCharts['{chart_id}'] = new Chart(ctx, {{
+                        type: 'pie',
+                        data: {json.dumps(chart_data)},
+                        options: chartOptions
+                    }});
+                </script>
+                """
+
+                components.html(chart_html, height=chart_height)
         else:
             st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
 
