@@ -1926,7 +1926,7 @@ if menu == "Etkileşim Günlüğü":
                 elif not sablon_degisti and alanlar_mevcut_sablona_esit:
                     sablon_yuklenecek = True
 
-                    if sablon_yuklenecek:
+                if sablon_yuklenecek:
                     st.session_state["bulk_mail_subject"] = yeni_icerik["subject"]
                     st.session_state["bulk_mail_body"] = yeni_icerik["body"]
                     st.session_state["bulk_mail_template_info"] = {
