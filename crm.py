@@ -3769,8 +3769,79 @@ elif menu == "Satış Analitiği":
         f"<div style='font-size:1.2em; color:#f7971e; font-weight:bold;'>{d1} - {d2} Arası Toplam: {aralik_toplam:,.2f} USD</div>",
         unsafe_allow_html=True,
     )
-    
+
+    # ---- Müşteri filtresi ----
+    customer_col = "Müşteri Adı" if "Müşteri Adı" in df_range.columns else None
+    df_filtered = df_range.copy()
+    selected_customer = None
+    if customer_col:
+        musteri_listesi = sorted(
+            df_range[customer_col]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", np.nan)
+            .dropna()
+            .unique()
+        )
+        musteri_opsiyonlari = ["Tüm Müşteriler"] + musteri_listesi
+        selected_customer = st.selectbox("Müşteri Bazında Filtre", musteri_opsiyonlari)
+        if selected_customer != "Tüm Müşteriler":
+            df_filtered = df_filtered[
+                df_filtered[customer_col].fillna("").astype(str).str.strip() == selected_customer
+            ]
+
+    filtered_total = float(df_filtered["Tutar_num"].sum())
+    if customer_col and selected_customer and selected_customer != "Tüm Müşteriler":
+        toplam_baslik = f"{selected_customer} Toplam"
+    elif customer_col:
+        toplam_baslik = "Tüm Müşteriler Toplam"
+    else:
+        toplam_baslik = "Seçili Aralık Toplam"
+
+    st.markdown(
+        f"<div style='font-size:1.1em; color:#185a9d; font-weight:bold;'>{toplam_baslik}: {filtered_total:,.2f} USD</div>",
+        unsafe_allow_html=True,
+    )
+        # ---- En yüksek ciroya sahip müşteriler ----
+    if "Müşteri Adı" in df_range.columns and not df_range.empty:
+        df_musteri = df_range.copy()
+        df_musteri["Müşteri Adı"] = df_musteri["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
+        top_musteriler = (
+            df_musteri.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(5)
+            .reset_index()
+        )
+        top_musteriler.rename(columns={"Tutar_num": "Toplam Ciro"}, inplace=True)
+
+        st.markdown(
+            "<h3 style='margin-top:20px; color:#185a9d;'>En Yüksek Ciroya Sahip İlk 5 Müşteri</h3>",
+            unsafe_allow_html=True,
+        )
+
+        col_tab, col_chart = st.columns([1, 1])
+        with col_tab:
+            display_df = top_musteriler.copy()
+            display_df["Toplam Ciro"] = display_df["Toplam Ciro"].map(lambda x: f"{x:,.2f} USD")
+            st.dataframe(display_df, use_container_width=True)
+        with col_chart:
+            st.bar_chart(top_musteriler.set_index("Müşteri Adı")["Toplam Ciro"], use_container_width=True)
+    else:
+        st.info("Seçilen tarih aralığında müşteri bazlı ciro bilgisi bulunamadı.")
+
+
     # ---- Detay tablo ----
-    show_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
-    show_cols = [c for c in show_cols if c in df_range.columns]
-    st.dataframe(df_range[show_cols].sort_values(by=date_col, ascending=False), use_container_width=True)
+    detail_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
+    detail_cols = [c for c in detail_cols if c in df_filtered.columns]
+
+    if df_filtered.empty:
+        st.info("Seçilen kriterlere uygun satış kaydı bulunamadı.")
+    else:
+        detail_df = df_filtered.copy()
+        if date_col in detail_df.columns:
+            detail_df = detail_df.sort_values(by=date_col, ascending=False)
+        if detail_cols:
+            detail_df = detail_df[detail_cols]
+        st.dataframe(detail_df, use_container_width=True)
