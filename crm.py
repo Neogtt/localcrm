@@ -1778,136 +1778,135 @@ if menu == "Etkileşim Günlüğü":
 
         unknown_country_label = "(Belirtilmedi)"
 
-    email_country_map = {}
+        email_country_map = {}
 
-    def kayitlardan_ulke_ekle(df, email_col, country_col):
-        if df is None or df.empty or email_col not in df.columns:
-            return
-        country_available = country_col in df.columns
-        for _, row in df.iterrows():
-            raw_email = row.get(email_col, "")
-            if pd.isna(raw_email) or str(raw_email).strip() == "":
-                continue
-            parsed_emails = extract_unique_emails(pd.Series([raw_email]))
-            country_val = str(row.get(country_col, "") if country_available else "").strip()
-            if not country_val or country_val.lower() in ["nan", "none"]:
-                country_val = unknown_country_label
-            for mail in parsed_emails:
-                email_country_map.setdefault(mail, set()).add(country_val)
+        def kayitlardan_ulke_ekle(df, email_col, country_col):
+            if df is None or df.empty or email_col not in df.columns:
+                return
+            country_available = country_col in df.columns
+            for _, row in df.iterrows():
+                raw_email = row.get(email_col, "")
+                if pd.isna(raw_email) or str(raw_email).strip() == "":
+                    continue
+                parsed_emails = extract_unique_emails(pd.Series([raw_email]))
+                country_val = str(row.get(country_col, "") if country_available else "").strip()
+                if not country_val or country_val.lower() in ["nan", "none"]:
+                    country_val = unknown_country_label
+                for mail in parsed_emails:
+                    email_country_map.setdefault(mail, set()).add(country_val)
 
-    kayitlardan_ulke_ekle(df_musteri, "E-posta", "Ülke")
-    kayitlardan_ulke_ekle(df_fuar_musteri, "E-mail", "Ülke")
+        kayitlardan_ulke_ekle(df_musteri, "E-posta", "Ülke")
+        kayitlardan_ulke_ekle(df_fuar_musteri, "E-mail", "Ülke")
 
-    tum_epostalar = sorted(email_country_map.keys(), key=lambda x: x.lower())
-    tum_ulkeler = sorted({ulke for ulkeler in email_country_map.values() for ulke in ulkeler})
+        tum_epostalar = sorted(email_country_map.keys(), key=lambda x: x.lower())
+        tum_ulkeler = sorted({ulke for ulkeler in email_country_map.values() for ulke in ulkeler})
 
-    if not tum_epostalar:
-        st.info("Gönderim yapabileceğiniz e-posta adresi bulunamadı.")
-        tum_ulkeler = []
-    else:
-        st.caption(f"Toplam benzersiz e-posta: {len(tum_epostalar)}")
-
-    st.session_state.setdefault("bulk_mail_subject", "")
-    st.session_state.setdefault("bulk_mail_body", "")
-    st.session_state.setdefault("bulk_mail_template_info", None)
-    st.session_state.setdefault("holiday_selected_template", "(Şablon seçiniz)")
-    st.session_state.setdefault("holiday_selected_language", None)
-    
-    secili_ulkeler = st.multiselect(
-        "Ülke filtresi",
-        tum_ulkeler,
-        default=tum_ulkeler,
-        help="Sadece seçilen ülkelerle ilişkili e-posta adresleri listelenir.",
-    ) if tum_ulkeler else []
-
-    secili_ulkeler_kumesi = set(secili_ulkeler) if secili_ulkeler else set(tum_ulkeler)
-
-    filtrelenmis_epostalar = [
-        mail
-        for mail, ulkeler in email_country_map.items()
-        if not secili_ulkeler_kumesi or ulkeler.intersection(secili_ulkeler_kumesi)
-    ]
-    filtrelenmis_epostalar = sorted(filtrelenmis_epostalar, key=lambda x: x.lower())
-
-    tumunu_sec_opsiyonu = "(Tümünü seç)"
-    multiselect_options = ([tumunu_sec_opsiyonu] + filtrelenmis_epostalar) if filtrelenmis_epostalar else []
-    varsayilan_secim = [tumunu_sec_opsiyonu] if filtrelenmis_epostalar else []
-
-    secilen_epostalar_raw = st.multiselect(
-        "E-posta adresleri",
-        multiselect_options,
-        default=varsayilan_secim,
-        help="Gönderim yapılacak adresleri seçin.",
-    ) if multiselect_options else []
-
-    if tumunu_sec_opsiyonu in secilen_epostalar_raw:
-        secilen_epostalar = filtrelenmis_epostalar
-    else:
-        secilen_epostalar = secilen_epostalar_raw
-
-    derived_languages = sorted({
-        COUNTRY_LANGUAGE_MAP.get(country)
-        for country in secili_ulkeler_kumesi
-        if country != unknown_country_label and COUNTRY_LANGUAGE_MAP.get(country)
-    })
-
-    template_placeholder = "(Şablon seçiniz)"
-    template_options = [template_placeholder] + list(HOLIDAY_MAIL_TEMPLATES.keys())
-    if st.session_state["holiday_selected_template"] not in template_options:
-        st.session_state["holiday_selected_template"] = template_placeholder
-
-    secilen_sablon = st.selectbox(
-        "Şablon",
-        template_options,
-        key="holiday_selected_template",
-    )
-
-    secilen_dil = None
-    fallback_kullanildi = False
-    if secilen_sablon != template_placeholder:
-        sablon_dilleri = sorted(HOLIDAY_MAIL_TEMPLATES.get(secilen_sablon, {}).keys())
-        aday_diller = [lang for lang in sablon_dilleri if lang in derived_languages]
-        if not aday_diller:
-            aday_diller = sablon_dilleri
-
-        if len(aday_diller) == 1:
-            secilen_dil = aday_diller[0]
-            st.session_state["holiday_selected_language"] = secilen_dil
-            st.caption(
-                f"Seçilen ülkelere göre dil otomatik olarak {LANGUAGE_LABELS.get(secilen_dil, secilen_dil)} olarak belirlendi."
-            )        
+        if not tum_epostalar:
+            st.info("Gönderim yapabileceğiniz e-posta adresi bulunamadı.")
+            tum_ulkeler = []
         else:
+            st.caption(f"Toplam benzersiz e-posta: {len(tum_epostalar)}")
+
+        st.session_state.setdefault("bulk_mail_subject", "")
+        st.session_state.setdefault("bulk_mail_body", "")
+        st.session_state.setdefault("bulk_mail_template_info", None)
+        st.session_state.setdefault("holiday_selected_template", "(Şablon seçiniz)")
+        st.session_state.setdefault("holiday_selected_language", None)
+
+        secili_ulkeler = st.multiselect(
+            "Ülke filtresi",
+            tum_ulkeler,
+            default=tum_ulkeler,
+            help="Sadece seçilen ülkelerle ilişkili e-posta adresleri listelenir.",
+        ) if tum_ulkeler else []
+
+        secili_ulkeler_kumesi = set(secili_ulkeler) if secili_ulkeler else set(tum_ulkeler)
+
+        filtrelenmis_epostalar = [
+            mail
+            for mail, ulkeler in email_country_map.items()
+            if not secili_ulkeler_kumesi or ulkeler.intersection(secili_ulkeler_kumesi)
+        ]
+        filtrelenmis_epostalar = sorted(filtrelenmis_epostalar, key=lambda x: x.lower())
+
+        tumunu_sec_opsiyonu = "(Tümünü seç)"
+        multiselect_options = ([tumunu_sec_opsiyonu] + filtrelenmis_epostalar) if filtrelenmis_epostalar else []
+        varsayilan_secim = [tumunu_sec_opsiyonu] if filtrelenmis_epostalar else []
+
+        secilen_epostalar_raw = st.multiselect(
+            "E-posta adresleri",
+            multiselect_options,
+            default=varsayilan_secim,
+            help="Gönderim yapılacak adresleri seçin.",
+        ) if multiselect_options else []
+
+        if tumunu_sec_opsiyonu in secilen_epostalar_raw:
+            secilen_epostalar = filtrelenmis_epostalar
+        else:
+            secilen_epostalar = secilen_epostalar_raw
+
+        derived_languages = sorted({
+            COUNTRY_LANGUAGE_MAP.get(country)
+            for country in secili_ulkeler_kumesi
+            if country != unknown_country_label and COUNTRY_LANGUAGE_MAP.get(country)
+        })
+
+        template_placeholder = "(Şablon seçiniz)"
+        template_options = [template_placeholder] + list(HOLIDAY_MAIL_TEMPLATES.keys())
+        if st.session_state["holiday_selected_template"] not in template_options:
+            st.session_state["holiday_selected_template"] = template_placeholder
+
+        secilen_sablon = st.selectbox(
+            "Şablon",
+            template_options,
+            key="holiday_selected_template",
+        )        
+
+
+        secilen_dil = None
+        fallback_kullanildi = False
+        if secilen_sablon != template_placeholder:
+            sablon_dilleri = sorted(HOLIDAY_MAIL_TEMPLATES.get(secilen_sablon, {}).keys())
+            aday_diller = [lang for lang in sablon_dilleri if lang in derived_languages]
+            if not aday_diller:
+                aday_diller = sablon_dilleri
+
+            if len(aday_diller) == 1:
+                secilen_dil = aday_diller[0]
+                st.session_state["holiday_selected_language"] = secilen_dil
+                st.caption(
+                    f"Seçilen ülkelere göre dil otomatik olarak {LANGUAGE_LABELS.get(secilen_dil, secilen_dil)} olarak belirlendi."
+                )
+            else:
+                onceki_dil = st.session_state.get("holiday_selected_language")
+                varsayilan_dil = None
+                if derived_languages:
+                    for dil in derived_languages:
+                        if dil in aday_diller:
+                            varsayilan_dil = dil
+                            break
+                if varsayilan_dil is None:
+                    varsayilan_dil = aday_diller[0] if aday_diller else None
+                if onceki_dil not in aday_diller:
+                    st.session_state["holiday_selected_language"] = varsayilan_dil
+
+                secilen_dil = st.selectbox(
+                    "Dil",
+                    aday_diller,
+                    format_func=lambda lang: LANGUAGE_LABELS.get(lang, lang.upper()),
+                    key="holiday_selected_language",
+                )
             
-            onceki_dil = st.session_state.get("holiday_selected_language")
-            varsayilan_dil = None
-            if derived_languages:
-                for dil in derived_languages:
-                    if dil in aday_diller:
-                        varsayilan_dil = dil
-                        break
-            if varsayilan_dil is None:
-                varsayilan_dil = aday_diller[0] if aday_diller else None
-            if onceki_dil not in aday_diller:
-                st.session_state["holiday_selected_language"] = varsayilan_dil
-
-            secilen_dil = st.selectbox(
-                "Dil",
-                aday_diller,
-                format_func=lambda lang: LANGUAGE_LABELS.get(lang, lang.upper()),
-                key="holiday_selected_language",
-            )
-
-            if secilen_dil:
-                mevcut_info = st.session_state.get("bulk_mail_template_info")
-                onceki_konu = st.session_state.get("bulk_mail_subject", "")
-                onceki_govde = st.session_state.get("bulk_mail_body", "")
-                mevcut_sablon_adi = mevcut_info["name"] if mevcut_info else None
-                mevcut_sablon_dili = mevcut_info["language"] if mevcut_info else None
-                alanlar_bos = not onceki_konu.strip() and not onceki_govde.strip()
-                alanlar_mevcut_sablona_esit = bool(
-                    mevcut_info
-                    and onceki_konu == mevcut_info.get("subject", "")
-                    and onceki_govde == mevcut_info.get("body", "")
+            mevcut_info = st.session_state.get("bulk_mail_template_info")
+            onceki_konu = st.session_state.get("bulk_mail_subject", "")
+            onceki_govde = st.session_state.get("bulk_mail_body", "")
+            mevcut_sablon_adi = mevcut_info["name"] if mevcut_info else None
+            mevcut_sablon_dili = mevcut_info["language"] if mevcut_info else None
+            alanlar_bos = not onceki_konu.strip() and not onceki_govde.strip()
+            alanlar_mevcut_sablona_esit = bool(
+                mevcut_info
+                and onceki_konu == mevcut_info.get("subject", "")
+                and onceki_govde == mevcut_info.get("body", "")
             )
 
             yeni_icerik, fallback_kullanildi = get_holiday_template_content(secilen_sablon, secilen_dil)
@@ -1936,60 +1935,60 @@ if menu == "Etkileşim Günlüğü":
                         "body": yeni_icerik["body"],
                         "fallback": fallback_kullanildi,
                     }
-    else:
-        st.session_state["holiday_selected_language"] = None
-
-
-    konu = st.text_input("E-posta Konusu", key="bulk_mail_subject")
-    govde = st.text_area(
-        "HTML Gövde",
-        key="bulk_mail_body",
-        height=280,
-        help="İsterseniz metni Türkçe/İngilizce olarak düzenleyebilirsiniz.",
-    )
-
-    yuklenen_gorsel = st.file_uploader(
-        "Görsel ekleyin (isteğe bağlı)",
-        type=["png", "jpg", "jpeg", "gif", "webp", "svg"],
-        accept_multiple_files=False,
-        help="Tek bir görsel yükleyebilirsiniz. Görsel inline gönderim için saklanacaktır.",
-    )
-
-    if filtrelenmis_epostalar:
-        onizleme_df = pd.DataFrame(
-            [
-                {
-                    "E-posta": mail,
-                    "Ülkeler": ", ".join(sorted(email_country_map.get(mail, {unknown_country_label}))),
-                }
-                for mail in filtrelenmis_epostalar
-            ]
-            )
-        st.dataframe(onizleme_df, use_container_width=True, hide_index=True)
-
-    etkin_ulke_text = "Tüm ülkeler" if not secili_ulkeler else ", ".join(secili_ulkeler)
-    st.markdown(
-        f"<div style='margin-top:12px; font-size:0.95em;'>"
-        f"<strong>Aktif ülke filtresi:</strong> {etiket if (etiket := etkin_ulke_text) else 'Tüm ülkeler'}<br>"
-        f"<strong>Seçilen adres sayısı:</strong> {len(secilen_epostalar)}<br>"
-        "<strong>Not:</strong> Gönderimlerde varsayılan HTML imzası otomatik olarak eklenecektir."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    if st.button("Toplu Maili Gönder", type="primary"):
-        if not secilen_epostalar:
-            st.warning("Lütfen en az bir e-posta adresi seçiniz.")
-        elif not konu.strip():
-            st.warning("Lütfen e-posta konusu giriniz.")
         else:
-            attachments = [yuklenen_gorsel] if yuklenen_gorsel else []
-            try:
-                with st.spinner("E-postalar gönderiliyor..."):
-                    send_fair_bulk_email(secilen_epostalar, konu.strip(), govde, attachments=attachments)
-                st.success(f"E-posta {len(secilen_epostalar)} alıcıya başarıyla gönderildi.")
-            except Exception as exc:
-                st.error(f"Gönderim sırasında bir hata oluştu: {exc}")
+            st.session_state["holiday_selected_language"] = None
+
+
+        konu = st.text_input("E-posta Konusu", key="bulk_mail_subject")
+        govde = st.text_area(
+            "HTML Gövde",
+            key="bulk_mail_body",
+            height=280,
+            help="İsterseniz metni Türkçe/İngilizce olarak düzenleyebilirsiniz.",
+        )
+
+        yuklenen_gorsel = st.file_uploader(
+            "Görsel ekleyin (isteğe bağlı)",
+            type=["png", "jpg", "jpeg", "gif", "webp", "svg"],
+            accept_multiple_files=False,
+            help="Tek bir görsel yükleyebilirsiniz. Görsel inline gönderim için saklanacaktır.",
+        )
+
+        if filtrelenmis_epostalar:
+            onizleme_df = pd.DataFrame(
+                [
+                    {
+                        "E-posta": mail,
+                        "Ülkeler": ", ".join(sorted(email_country_map.get(mail, {unknown_country_label}))),
+                    }
+                    for mail in filtrelenmis_epostalar
+                ]
+            )
+            st.dataframe(onizleme_df, use_container_width=True, hide_index=True)
+
+        etkin_ulke_text = "Tüm ülkeler" if not secili_ulkeler else ", ".join(secili_ulkeler)
+        st.markdown(
+            f"<div style='margin-top:12px; font-size:0.95em;'>"
+            f"<strong>Aktif ülke filtresi:</strong> {etiket if (etiket := etkin_ulke_text) else 'Tüm ülkeler'}<br>"
+            f"<strong>Seçilen adres sayısı:</strong> {len(secilen_epostalar)}<br>"
+            "<strong>Not:</strong> Gönderimlerde varsayılan HTML imzası otomatik olarak eklenecektir."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Toplu Maili Gönder", type="primary"):
+            if not secilen_epostalar:
+                st.warning("Lütfen en az bir e-posta adresi seçiniz.")
+            elif not konu.strip():
+                st.warning("Lütfen e-posta konusu giriniz.")
+            else:
+                attachments = [yuklenen_gorsel] if yuklenen_gorsel else []
+                try:
+                    with st.spinner("E-postalar gönderiliyor..."):
+                        send_fair_bulk_email(secilen_epostalar, konu.strip(), govde, attachments=attachments)
+                    st.success(f"E-posta {len(secilen_epostalar)} alıcıya başarıyla gönderildi.")
+                except Exception as exc:
+                    st.error(f"Gönderim sırasında bir hata oluştu: {exc}")
 
 
 ### ===========================
