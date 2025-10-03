@@ -1966,7 +1966,7 @@ elif menu == "Özel Gün Tebrikleri":
             ]
          )
         
-    st.dataframe(onizleme_df, use_container_width=True, hide_index=True)
+        st.dataframe(onizleme_df, use_container_width=True, hide_index=True)
 
     etkin_ulke_text = "Tüm ülkeler" if not secili_ulkeler else ", ".join(secili_ulkeler)
     st.markdown(
