@@ -1107,6 +1107,8 @@ if menu == "Genel Bakış":
         df_proforma["Sevk Durumu"] = ""
     if "Ülke" not in df_proforma.columns:
         df_proforma["Ülke"] = ""
+    if "Termin Tarihi" not in df_proforma.columns:
+        df_proforma["Termin Tarihi"] = ""        
     sevk_bekleyenler = df_proforma[(df_proforma["Durum"] == "Siparişe Dönüştü") & (~df_proforma["Sevk Durumu"].isin(["Sevkedildi", "Ulaşıldı"]))] if "Durum" in df_proforma.columns else pd.DataFrame()
     try:
         toplam_siparis = pd.to_numeric(sevk_bekleyenler["Tutar"], errors="coerce").sum()
@@ -1116,7 +1118,30 @@ if menu == "Genel Bakış":
     if sevk_bekleyenler.empty:
         st.info("Sevk bekleyen sipariş yok.")
     else:
-        st.dataframe(sevk_bekleyenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+        sevk_bekleyenler = sevk_bekleyenler.copy()
+        sevk_bekleyenler["Termin Tarihi"] = pd.to_datetime(
+            sevk_bekleyenler["Termin Tarihi"], errors="coerce"
+        )
+        sevk_bekleyenler = sevk_bekleyenler.sort_values(
+            by="Termin Tarihi", ascending=True, na_position="last"
+        )
+        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].dt.strftime("%d/%m/%Y")
+        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].fillna("")
+        st.dataframe(
+            sevk_bekleyenler[
+                [
+                    "Müşteri Adı",
+                    "Ülke",
+                    "Proforma No",
+                    "Tarih",
+                    "Termin Tarihi",
+                    "Tutar",
+                    "Vade (gün)",
+                    "Açıklama",
+                ]
+            ],
+            use_container_width=True,
+        )       
 
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
