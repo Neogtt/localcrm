@@ -1764,19 +1764,19 @@ if menu == "Etkileşim Günlüğü":
         else:
             st.info("Bu tarihler arasında kayıt yok.")
 
-    if menu == "Özel Gün Tebrikleri":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Özel Gün Tebrikleri</h2>", unsafe_allow_html=True)
-    st.markdown("Seçilmiş kişilere bayram ve yeni yıl tebrik e-postaları gönderebilirsiniz.")
+    elif menu == "Özel Gün Tebrikleri":
+        st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Özel Gün Tebrikleri</h2>", unsafe_allow_html=True)
+        st.markdown("Seçilmiş kişilere bayram ve yeni yıl tebrik e-postaları gönderebilirsiniz.")
 
         st.markdown(
         "<h4 style='margin-top:0;'>Seçilmiş kişilere bayram ve yeni yıl tebrikleri gönderin</h4>",
         unsafe_allow_html=True,
     )
 
-    musteriden_eposta = extract_unique_emails(df_musteri.get("E-posta")) if "E-posta" in df_musteri.columns else []
-    fuardan_eposta = extract_unique_emails(df_fuar_musteri.get("E-mail")) if "E-mail" in df_fuar_musteri.columns else []
+        musteriden_eposta = extract_unique_emails(df_musteri.get("E-posta")) if "E-posta" in df_musteri.columns else []
+        fuardan_eposta = extract_unique_emails(df_fuar_musteri.get("E-mail")) if "E-mail" in df_fuar_musteri.columns else []
 
-    unknown_country_label = "(Belirtilmedi)"
+        unknown_country_label = "(Belirtilmedi)"
 
     email_country_map = {}
 
@@ -1918,15 +1918,15 @@ if menu == "Etkileşim Günlüğü":
                     )
                     manuel_duzenleme = bool(mevcut_info and not alanlar_mevcut_sablona_esit)
 
-                sablon_yuklenecek = False
-                if alanlar_bos:
+                    sablon_yuklenecek = False
+                    if alanlar_bos:
                     sablon_yuklenecek = True
-                elif sablon_degisti and not manuel_duzenleme:
+                    elif sablon_degisti and not manuel_duzenleme:
                     sablon_yuklenecek = True
-                elif not sablon_degisti and alanlar_mevcut_sablona_esit:
+                    elif not sablon_degisti and alanlar_mevcut_sablona_esit:
                     sablon_yuklenecek = True
 
-                if sablon_yuklenecek:
+                    if sablon_yuklenecek:
                     st.session_state["bulk_mail_subject"] = yeni_icerik["subject"]
                     st.session_state["bulk_mail_body"] = yeni_icerik["body"]
                     st.session_state["bulk_mail_template_info"] = {
