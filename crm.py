@@ -3406,12 +3406,16 @@ if menu == "Fuar Kayıtları":
                                 image_cid_state[attachment_key] = cid
                             image_previews.append((uploaded_file.name, cid, attachment_key))
                             inline_cid_map[attachment_key] = cid
-                            st.code(f'<img src="cid:{cid_value}" alt="{file_name}">', language="html")
 
                     if image_previews:
                         st.markdown("**HTML gövdesine eklenecek görseller:**")
                         for file_name, cid, _ in image_previews:
                             cid_value = cid.strip("<>")
+                            
+                            st.code(
+                                f'<img src="cid:{cid_value}" alt="{file_name}">',
+                                language="html"
+                            )                            
                  
                     if "Tümünü seç" in selected_options:
                         selected_recipients = email_list
