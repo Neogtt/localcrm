@@ -1915,15 +1915,15 @@ if menu == "Etkileşim Günlüğü":
                 sablon_degisti = (
                     mevcut_sablon_adi != secilen_sablon
                     or mevcut_sablon_dili != secilen_dil
-                    )
-                    manuel_duzenleme = bool(mevcut_info and not alanlar_mevcut_sablona_esit)
+                )
+                manuel_duzenleme = bool(mevcut_info and not alanlar_mevcut_sablona_esit)
 
-                    sablon_yuklenecek = False
-                    if alanlar_bos:
+                sablon_yuklenecek = False
+                if alanlar_bos:
                     sablon_yuklenecek = True
-                    elif sablon_degisti and not manuel_duzenleme:
+                elif sablon_degisti and not manuel_duzenleme:
                     sablon_yuklenecek = True
-                    elif not sablon_degisti and alanlar_mevcut_sablona_esit:
+                elif not sablon_degisti and alanlar_mevcut_sablona_esit:
                     sablon_yuklenecek = True
 
                     if sablon_yuklenecek:
