@@ -83,13 +83,16 @@ if st.sidebar.button("Çıkış Yap"):
     st.session_state.user = None
     st.rerun()
 
+def _request_manual_sync():
+    st.session_state["_sync_requested"] = True
+
+
 if st.session_state.sync_status:
     status_type, status_msg = st.session_state.sync_status
     display_fn = getattr(st, status_type, st.info)
     display_fn(status_msg)
 
-if st.sidebar.button("🔁 Excel Senkronizasyonu"):
-    sync_excel_bidirectional()
+st.sidebar.button("🔁 Excel Senkronizasyonu", on_click=_request_manual_sync)
 
 # --- Referans listeler ---
 ulke_listesi = sorted([
@@ -591,6 +594,7 @@ def update_excel():
     downloaded.Upload()
 
 
+
 def sync_excel_bidirectional():
     global downloaded
 
@@ -632,6 +636,11 @@ def sync_excel_bidirectional():
             st.session_state.sync_status = ("error", f"Drive'a dosya yüklenirken hata oluştu: {e}")
     else:
         st.session_state.sync_status = ("info", "Dosyalar zaten senkron görünüyor.")
+
+
+if st.session_state.pop("_sync_requested", False):
+    sync_excel_bidirectional()
+
 
 # ===========================
 # ==== GOOGLE SHEETS (MÜŞTERİ) SENKRON
@@ -1094,6 +1103,8 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
     if st.button("Müşterileri Sheets’e Yaz"):
         push_customers_throttled()
 
+
+
 ### ===========================
 ### === GENEL BAKIŞ (Vade Durumu Dahil) ===
 ### ===========================
@@ -1101,32 +1112,93 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
 if menu == "Genel Bakış":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Genel Bakış</h2>", unsafe_allow_html=True)
 
+    invoices_df = df_evrak.copy()
+    if "Tutar" not in invoices_df.columns:
+        invoices_df["Tutar"] = 0
+    invoices_df["Tutar_num"] = invoices_df["Tutar"].apply(smart_to_num).fillna(0.0)
+    toplam_fatura_tutar = float(invoices_df["Tutar_num"].sum())
+
+    st.markdown("### Satış Analitiği Özeti")
+
+    summary_cols = st.columns(4)
+    summary_cols[0].metric("Toplam Fatura Tutarı", f"{toplam_fatura_tutar:,.2f} USD")
+
+    date_col = next((col for col in ["Fatura Tarihi", "Tarih"] if col in invoices_df.columns), None)
+    today_norm = pd.Timestamp.today().normalize()
+
+    if date_col:
+        invoices_df[date_col] = pd.to_datetime(invoices_df[date_col], errors="coerce")    
     
 
-    # ---------- Toplam Fatura ----------
-    toplam_fatura_tutar = 0.0
-    if "Tutar" in df_evrak.columns and not df_evrak.empty:
-        df_evrak = df_evrak.copy()
-        df_evrak["Tutar_num"] = df_evrak["Tutar"].apply(smart_to_num).fillna(0.0)
-        toplam_fatura_tutar = float(df_evrak["Tutar_num"].sum())
-    st.markdown(f"<div style='font-size:1.5em; color:#d35400; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura_tutar:,.2f} USD</div>", unsafe_allow_html=True)
+    if date_col and invoices_df[date_col].notna().any():
+        last_30_start = today_norm - pd.Timedelta(days=29)
+        last_30_end = today_norm + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)
+        mask_last_30 = invoices_df[date_col].between(last_30_start, last_30_end, inclusive="both")
+        last_30_total = float(invoices_df.loc[mask_last_30, "Tutar_num"].sum())
+        summary_cols[1].metric("Son 30 Gün Cirosu", f"{last_30_total:,.2f} USD", f"{int(mask_last_30.sum())} Fatura")
+
+        current_year = today_norm.year
+        mask_year = invoices_df[date_col].dt.year == current_year
+        year_total = float(invoices_df.loc[mask_year, "Tutar_num"].sum())
+        summary_cols[2].metric(f"{current_year} Toplamı", f"{year_total:,.2f} USD", f"{int(mask_year.sum())} Fatura")
+    else:
+        summary_cols[1].metric("Son 30 Gün Cirosu", "0.00 USD")
+        summary_cols[2].metric(f"{today_norm.year} Toplamı", "0.00 USD")
+
+    if "Müşteri Adı" in invoices_df.columns:
+        active_customers = (
+            invoices_df["Müşteri Adı"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .replace("", np.nan)
+            .dropna()
+            .nunique()
+        )
+    else:
+        active_customers = 0
+    summary_cols[3].metric("Aktif Müşteri", str(active_customers))
+
+    if invoices_df.empty:
+        st.info("Satış analitiği için fatura kaydı bulunmuyor.")
+    elif "Müşteri Adı" in invoices_df.columns:
+        top_df = invoices_df[invoices_df["Tutar_num"] > 0].copy()
+        top_df["Müşteri Adı"] = top_df["Müşteri Adı"].fillna("Bilinmeyen Müşteri").astype(str).str.strip()
+        top_customers = (
+            top_df.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(5)
+            .reset_index()
+        )
+        if not top_customers.empty:
+            st.markdown("#### En Yüksek Ciroya Sahip İlk 5 Müşteri")
+            display_df = top_customers.copy()
+            display_df["Toplam Ciro"] = display_df["Tutar_num"].map(lambda x: f"{x:,.2f} USD")
+            st.dataframe(display_df[["Müşteri Adı", "Toplam Ciro"]], use_container_width=True)
+        else:
+            st.info("Müşteri bazında ciro hesaplanacak veri bulunamadı.")
+    else:
+        st.info("Satış analitiği için müşteri bilgisi bulunmuyor.")
+
+    
+
 
     # ---------- Vade Durumu Kutucukları ----------
     for col in ["Vade Tarihi", "Ödendi"]:
-        if col not in df_evrak.columns:
-            df_evrak[col] = "" if col == "Vade Tarihi" else False
+        if col not in invoices_df.columns:
+            invoices_df[col] = "" if col == "Vade Tarihi" else False
 
-    vade_ts = pd.to_datetime(df_evrak["Vade Tarihi"], errors="coerce")
-    today_norm = pd.Timestamp.today().normalize()
-
-    od_me = ~df_evrak["Ödendi"].astype(bool)
+    vade_ts = pd.to_datetime(invoices_df["Vade Tarihi"], errors="coerce")
+     
+    od_me = ~invoices_df["Ödendi"].astype(bool)
     vadesi_gelmemis_m = (vade_ts > today_norm) & od_me
     vadesi_bugun_m     = (vade_ts.dt.date == today_norm.date()) & od_me
     gecikmis_m         = (vade_ts < today_norm) & od_me
 
-    tg_sum = float(df_evrak.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
-    tb_sum = float(df_evrak.loc[vadesi_bugun_m, "Tutar_num"].sum())
-    gec_sum = float(df_evrak.loc[gecikmis_m, "Tutar_num"].sum())
+    tg_sum = float(invoices_df.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
+    tb_sum = float(invoices_df.loc[vadesi_bugun_m, "Tutar_num"].sum())
+    gec_sum = float(invoices_df.loc[gecikmis_m, "Tutar_num"].sum())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
@@ -1270,11 +1342,11 @@ if menu == "Genel Bakış":
     # ---- Vade Takibi Tablosu (HERKES GÖRÜR) ----
     st.markdown("### Vadeli Fatura ve Tahsilat Takibi")
     for col in ["Proforma No", "Vade (gün)", "Ödendi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli"]:
-        if col not in df_evrak.columns:
-            df_evrak[col] = "" if col != "Ödendi" else False
-    df_evrak["Ödendi"] = df_evrak["Ödendi"].fillna(False).astype(bool)
+        if col not in invoices_df.columns:
+            invoices_df[col] = "" if col != "Ödendi" else False
+    invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
 
-    vade_df = df_evrak[df_evrak["Vade Tarihi"].notna() & (~df_evrak["Ödendi"])].copy()
+    vade_df = invoices_df[invoices_df["Vade Tarihi"].notna() & (~invoices_df["Ödendi"])].copy()
     gecikmis_df = pd.DataFrame()
     if vade_df.empty:
         st.info("Açık vade kaydı yok.")
