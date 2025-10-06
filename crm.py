@@ -4025,6 +4025,9 @@ elif menu == "Satış Analitiği":
                     round((value / total_value) * 100, 1) if total_value else 0 for value in values
                 ]
                 legend_labels = [f"{label} (%{pct:.1f})" for label, pct in zip(labels, percentages)]
+                
+                customer_names_js = json.dumps(labels, ensure_ascii=False)
+                percentage_values_js = json.dumps(percentages)                
 
                 base_colors = [
                     "#3366CC",
@@ -4076,6 +4079,7 @@ elif menu == "Satış Analitiği":
                     <canvas id="{chart_id}" height="{chart_height}"></canvas>
                 </div>
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
                 <script>
                     const ctx = document.getElementById('{chart_id}').getContext('2d');
                     if (window.customerPieCharts === undefined) {{
@@ -4083,6 +4087,9 @@ elif menu == "Satış Analitiği":
                     }}
                     if (window.customerPieCharts['{chart_id}']) {{
                         window.customerPieCharts['{chart_id}'].destroy();
+                    }}
+                    if (typeof ChartDataLabels !== 'undefined') {{
+                        Chart.register(ChartDataLabels);
                     }}
                     const chartOptions = {json.dumps(chart_options)};
                     chartOptions.plugins.tooltip = chartOptions.plugins.tooltip || {{}};
@@ -4094,6 +4101,30 @@ elif menu == "Satış Analitiği":
                         const formatter = new Intl.NumberFormat('tr-TR', {{ style: 'decimal', maximumFractionDigits: 2 }});
                         return context.label + ': ' + formatter.format(value) + ' USD (%' + percentage + ')';
                     }};
+
+                    chartOptions.layout = chartOptions.layout || {{}};
+                    chartOptions.layout.padding = chartOptions.layout.padding || {{ top: 20, bottom: 20, left: 20, right: 20 }};
+                    chartOptions.plugins.datalabels = chartOptions.plugins.datalabels || {{}};
+                    chartOptions.plugins.datalabels.color = '#ffffff';
+                    chartOptions.plugins.datalabels.font = {{ weight: 'bold', size: 12 }};
+                    chartOptions.plugins.datalabels.anchor = 'center';
+                    chartOptions.plugins.datalabels.align = 'center';
+                    chartOptions.plugins.datalabels.offset = 0;
+                    chartOptions.plugins.datalabels.clamp = true;
+                    chartOptions.plugins.datalabels.formatter = function(value, context) {{
+                        const customerNames = {customer_names_js};
+                        const percentageValues = {percentage_values_js};
+                        const name = customerNames[context.dataIndex] || '';
+                        const pctValue = percentageValues[context.dataIndex];
+                        const pctText = (typeof pctValue === 'number' && !isNaN(pctValue)) ? `%${pctValue.toFixed(1)}` : '';
+                        if (!name && !pctText) {{
+                            return '';
+                        }}
+                        return name + (pctText ? '\n' + pctText : '');
+                    }};
+                    chartOptions.rotation = 0;
+                    chartOptions.circumference = 360;
+                    chartOptions.maintainAspectRatio = false;
                     window.customerPieCharts['{chart_id}'] = new Chart(ctx, {{
                         type: 'pie',
                         data: {json.dumps(chart_data)},
