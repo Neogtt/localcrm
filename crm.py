@@ -4116,7 +4116,7 @@ elif menu == "Satış Analitiği":
                         const percentageValues = {percentage_values_js};
                         const name = customerNames[context.dataIndex] || '';
                         const pctValue = percentageValues[context.dataIndex];
-                        const pctText = (typeof pctValue === 'number' && !isNaN(pctValue)) ? `%${pctValue.toFixed(1)}` : '';
+                        const pctText = (typeof pctValue === 'number' && !isNaN(pctValue)) ? ('%' + pctValue.toFixed(1)) : '';
                         if (!name && !pctText) {{
                             return '';
                         }}
