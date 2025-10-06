@@ -3886,7 +3886,7 @@ elif menu == "Satış Analitiği":
     end_ts   = pd.to_datetime(d2) + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)  # gün sonu
 
     mask = df_evrak[date_col].between(start_ts, end_ts, inclusive="both")
-    df_range = df_evrak[mask]
+    df_range = df_evrak[mask].copy()
 
     aralik_toplam = float(df_range["Tutar_num"].sum())
     st.markdown(
@@ -3895,12 +3895,49 @@ elif menu == "Satış Analitiği":
     )
 
     # ---- Müşteri filtresi ----
-    customer_col = "Müşteri Adı" if "Müşteri Adı" in df_range.columns else None
-    df_filtered = df_range.copy()
+    df_analytics = df_range.copy()
+    customer_col = "Müşteri Adı" if "Müşteri Adı" in df_analytics.columns else None
+
+    selected_segment = None
+    segment_label = "Müşteri Segmenti"
+    if customer_col and "Kategori" in df_musteri.columns and not df_musteri.empty:
+        segment_df = df_musteri[["Müşteri Adı", "Kategori"]].dropna(subset=["Müşteri Adı"]).copy()
+        if not segment_df.empty:
+            segment_df["Müşteri Adı"] = segment_df["Müşteri Adı"].astype(str).str.strip()
+            segment_series = (
+                segment_df.drop_duplicates("Müşteri Adı").set_index("Müşteri Adı")["Kategori"]
+            )
+            if not segment_series.empty:
+                df_analytics[segment_label] = (
+                    df_analytics[customer_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .map(segment_series)
+                    .fillna("Belirtilmemiş")
+                )
+                segment_options = (
+                    ["Tüm Segmentler"]
+                    + sorted(
+                        df_analytics[segment_label]
+                        .dropna()
+                        .astype(str)
+                        .str.strip()
+                        .unique()
+                        .tolist(),
+                        key=lambda x: x.lower(),
+                    )
+                )
+                if len(segment_options) > 1:
+                    selected_segment = st.selectbox("Müşteri Segmenti", segment_options)
+                    if selected_segment != "Tüm Segmentler":
+                        df_analytics = df_analytics[df_analytics[segment_label] == selected_segment]
+
+    df_filtered = df_analytics.copy()
     selected_customer = None
     if customer_col:
         musteri_listesi = sorted(
-            df_range[customer_col]
+            df_analytics[customer_col]
             .dropna()
             .astype(str)
             .str.strip()
@@ -3916,20 +3953,26 @@ elif menu == "Satış Analitiği":
             ]
 
     filtered_total = float(df_filtered["Tutar_num"].sum())
+    segment_text = (
+        f"{selected_segment} Segmenti - "
+        if selected_segment and selected_segment != "Tüm Segmentler"
+        else ""
+    )
     if customer_col and selected_customer and selected_customer != "Tüm Müşteriler":
-        toplam_baslik = f"{selected_customer} Toplam"
+        toplam_baslik = f"{segment_text}{selected_customer} Toplam"
     elif customer_col:
-        toplam_baslik = "Tüm Müşteriler Toplam"
+        toplam_baslik = f"{segment_text}Tüm Müşteriler Toplam"
     else:
-        toplam_baslik = "Seçili Aralık Toplam"
+        toplam_baslik = f"{segment_text}Seçili Aralık Toplam"
 
     st.markdown(
         f"<div style='font-size:1.1em; color:#185a9d; font-weight:bold;'>{toplam_baslik}: {filtered_total:,.2f} USD</div>",
         unsafe_allow_html=True,
     )
         # ---- En yüksek ciroya sahip müşteriler ----
-    if "Müşteri Adı" in df_range.columns and not df_range.empty:
-        df_musteri = df_range.copy()
+    # ---- En yüksek ciroya sahip müşteriler ----
+    if "Müşteri Adı" in df_analytics.columns and not df_analytics.empty:
+        df_musteri = df_analytics.copy()
         df_musteri["Müşteri Adı"] = df_musteri["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
         top_musteriler = (
             df_musteri.groupby("Müşteri Adı")["Tutar_num"]
@@ -3955,13 +3998,13 @@ elif menu == "Satış Analitiği":
     else:
         st.info("Seçilen tarih aralığında müşteri bazlı ciro bilgisi bulunamadı.")
 
-    if "Müşteri Adı" in df_range.columns and not df_range.empty:
+    if "Müşteri Adı" in df_analytics.columns and not df_analytics.empty:
         st.markdown(
             "<h3 style='margin-top:20px; color:#185a9d;'>Müşteri Bazında Ciro Yüzdeleri</h3>",
             unsafe_allow_html=True,
         )
 
-        pie_df = df_range.copy()
+        pie_df = df_analytics.copy()
         pie_df["Müşteri Adı"] = pie_df["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
         pie_summary = (
             pie_df.groupby("Müşteri Adı")["Tutar_num"]
