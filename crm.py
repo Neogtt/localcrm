@@ -59,6 +59,8 @@ USERS = {
 }
 if "user" not in st.session_state:
     st.session_state.user = None
+if "sync_status" not in st.session_state:
+    st.session_state.sync_status = None
 
 def login_screen():
     st.title("ŞEKEROĞLU CRM - Giriş Ekranı")
@@ -80,6 +82,14 @@ if not st.session_state.user:
 if st.sidebar.button("Çıkış Yap"):
     st.session_state.user = None
     st.rerun()
+
+if st.session_state.sync_status:
+    status_type, status_msg = st.session_state.sync_status
+    display_fn = getattr(st, status_type, st.info)
+    display_fn(status_msg)
+
+if st.sidebar.button("🔁 Excel Senkronizasyonu"):
+    sync_excel_bidirectional()
 
 # --- Referans listeler ---
 ulke_listesi = sorted([
@@ -487,76 +497,82 @@ downloaded = drive.CreateFile({'id': EXCEL_FILE_ID})
 downloaded.FetchMetadata(fetch_all=True)
 downloaded.GetContentFile("temp.xlsx")
 
-# --- Dataframe yükleme ---
-if os.path.exists("temp.xlsx"):
-    try:
-        df_musteri = pd.read_excel("temp.xlsx", sheet_name=0)
-    except Exception:
+
+def load_dataframes_from_excel(path: str = "temp.xlsx"):
+    global df_musteri, df_kayit, df_teklif, df_proforma, df_evrak, df_eta, df_fuar_musteri
+
+    if os.path.exists(path):
+        try:
+            df_musteri = pd.read_excel(path, sheet_name=0)
+        except Exception:
+            df_musteri = pd.DataFrame(columns=[
+                "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
+            ])
+        try:
+            df_kayit = pd.read_excel(path, sheet_name="Kayıtlar")
+        except Exception:
+            df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
+        try:
+            df_teklif = pd.read_excel(path, sheet_name="Teklifler")
+        except Exception:
+            df_teklif = pd.DataFrame(columns=[
+                "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
+            ])
+        try:
+            df_proforma = pd.read_excel(path, sheet_name="Proformalar")
+            for col in ["Proforma No", "Vade", "Sevk Durumu"]:
+                if col not in df_proforma.columns:
+                    df_proforma[col] = ""
+        except Exception:
+            df_proforma = pd.DataFrame(columns=[
+                "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
+            ])
+        try:
+            df_evrak = pd.read_excel(path, sheet_name="Evraklar")
+            for col in ["Yük Resimleri", "EK Belgeler"]:
+                if col not in df_evrak.columns:
+                    df_evrak[col] = ""
+        except Exception:
+            df_evrak = pd.DataFrame(columns=[
+                "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
+                "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+                "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
+                "Yük Resimleri", "EK Belgeler"
+            ])
+        try:
+            df_eta = pd.read_excel(path, sheet_name="ETA")
+        except Exception:
+            df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+        try:
+            df_fuar_musteri = pd.read_excel(path, sheet_name="FuarMusteri")
+        except Exception:
+            df_fuar_musteri = pd.DataFrame(columns=[
+                "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
+            ])
+    else:
         df_musteri = pd.DataFrame(columns=[
             "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
         ])
-    try:
-        df_kayit = pd.read_excel("temp.xlsx", sheet_name="Kayıtlar")
-    except Exception:
         df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
-    try:
-        df_teklif = pd.read_excel("temp.xlsx", sheet_name="Teklifler")
-    except Exception:
         df_teklif = pd.DataFrame(columns=[
             "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
         ])
-    try:
-        df_proforma = pd.read_excel("temp.xlsx", sheet_name="Proformalar")
-        for col in ["Proforma No", "Vade", "Sevk Durumu"]:
-            if col not in df_proforma.columns:
-                df_proforma[col] = ""
-    except Exception:
         df_proforma = pd.DataFrame(columns=[
             "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
         ])
-    try:
-        df_evrak = pd.read_excel("temp.xlsx", sheet_name="Evraklar")
-        for col in ["Yük Resimleri", "EK Belgeler"]:
-            if col not in df_evrak.columns:
-                df_evrak[col] = ""
-    except Exception:
         df_evrak = pd.DataFrame(columns=[
             "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
             "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
             "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
             "Yük Resimleri", "EK Belgeler"
         ])
-    try:
-        df_eta = pd.read_excel("temp.xlsx", sheet_name="ETA")
-    except Exception:
         df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
-    try:
-        df_fuar_musteri = pd.read_excel("temp.xlsx", sheet_name="FuarMusteri")
-    except Exception:
         df_fuar_musteri = pd.DataFrame(columns=[
             "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
         ])
-else:
-    df_musteri = pd.DataFrame(columns=[
-        "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
-    ])
-    df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
-    df_teklif = pd.DataFrame(columns=[
-        "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
-    ])
-    df_proforma = pd.DataFrame(columns=[
-        "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
-    ])
-    df_evrak = pd.DataFrame(columns=[
-        "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
-        "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
-        "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
-        "Yük Resimleri", "EK Belgeler"
-    ])
-    df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
-    df_fuar_musteri = pd.DataFrame(columns=[
-        "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
-    ])
+
+
+load_dataframes_from_excel()
 
 def update_excel():
     buffer = io.BytesIO()
@@ -573,6 +589,49 @@ def update_excel():
         f.write(buffer.read())
     downloaded.SetContentFile("temp.xlsx")
     downloaded.Upload()
+
+
+def sync_excel_bidirectional():
+    global downloaded
+
+    try:
+        downloaded.FetchMetadata(fetch_all=True)
+        remote_raw = downloaded.get('modifiedDate') or downloaded.get('modifiedTime')
+        remote_ts = None
+        if remote_raw:
+            remote_ts = pd.to_datetime(remote_raw, utc=True).tz_convert(None).to_pydatetime()
+    except Exception as e:
+        st.session_state.sync_status = ("error", f"Drive meta verisi alınamadı: {e}")
+        return
+
+    local_exists = os.path.exists("temp.xlsx")
+    local_ts = None
+    if local_exists:
+        try:
+            local_ts = datetime.datetime.fromtimestamp(os.path.getmtime("temp.xlsx"))
+        except Exception:
+            local_ts = None
+
+    tolerance = datetime.timedelta(seconds=2)
+
+    if not local_exists or (remote_ts and (local_ts is None or remote_ts - local_ts > tolerance)):
+        try:
+            downloaded.GetContentFile("temp.xlsx")
+            load_dataframes_from_excel()
+            st.session_state.sync_status = ("success", "Google Drive dosyası daha güncel bulundu; yerel kopya yenilendi.")
+        except Exception as e:
+            st.session_state.sync_status = ("error", f"Drive'dan dosya indirilirken hata oluştu: {e}")
+        return
+
+    if remote_ts and local_ts and (local_ts - remote_ts > tolerance):
+        try:
+            downloaded.SetContentFile("temp.xlsx")
+            downloaded.Upload()
+            st.session_state.sync_status = ("success", "Yerel dosya daha güncel bulundu; Drive üzerindeki dosya güncellendi.")
+        except Exception as e:
+            st.session_state.sync_status = ("error", f"Drive'a dosya yüklenirken hata oluştu: {e}")
+    else:
+        st.session_state.sync_status = ("info", "Dosyalar zaten senkron görünüyor.")
 
 # ===========================
 # ==== GOOGLE SHEETS (MÜŞTERİ) SENKRON
