@@ -8,6 +8,7 @@ import smtplib
 from email.message import EmailMessage
 from email.utils import make_msgid
 import streamlit.components.v1 as components
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
 
@@ -4015,125 +4016,51 @@ elif menu == "Satış Analitiği":
 
         if not pie_summary.empty:
             total_value = float(pie_summary["Tutar_num"].sum())
-            labels = pie_summary["Müşteri Adı"].tolist()
-            values = [float(v) for v in pie_summary["Tutar_num"].tolist()]
+
 
             if total_value <= 0:
                 st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
             else:
-                percentages = [
-                    round((value / total_value) * 100, 1) if total_value else 0 for value in values
+                pie_summary["Yüzde"] = pie_summary["Tutar_num"].apply(
+                    lambda value: round((float(value) / total_value) * 100, 1) if total_value else 0.0
+                )
+
+                colors = plt.cm.tab20(np.linspace(0, 1, len(pie_summary)))
+                fig, ax = plt.subplots(figsize=(8, 6))
+                wedges, _, autotexts = ax.pie(
+                    pie_summary["Tutar_num"],
+                    autopct=lambda pct: f"%{pct:.1f}" if pct > 0 else "",
+                    startangle=0,
+                    colors=colors,
+                    textprops={"color": "white", "weight": "bold"},
+                )
+                for autotext in autotexts:
+                    autotext.set_fontsize(10)
+
+                legend_labels = [
+                    f"{label} (%{pct:.1f})" for label, pct in zip(pie_summary["Müşteri Adı"], pie_summary["Yüzde"])
                 ]
-                legend_labels = [f"{label} (%{pct:.1f})" for label, pct in zip(labels, percentages)]
-                
-                customer_names_js = json.dumps(labels, ensure_ascii=False)
-                percentage_values_js = json.dumps(percentages)                
 
-                base_colors = [
-                    "#3366CC",
-                    "#DC3912",
-                    "#FF9900",
-                    "#109618",
-                    "#990099",
-                    "#0099C6",
-                    "#DD4477",
-                    "#66AA00",
-                    "#B82E2E",
-                    "#316395",
-                    "#994499",
-                    "#22AA99",
-                    "#AAAA11",
-                    "#6633CC",
-                    "#E67300",
-                    "#8B0707",
-                    "#651067",
-                    "#329262",
-                    "#5574A6",
-                    "#3B3EAC",
-                ]
-                colors = [base_colors[i % len(base_colors)] for i in range(len(values))]
+                ax.legend(
+                    wedges,
+                    legend_labels,
+                    title="Müşteriler",
+                    loc="center left",
+                    bbox_to_anchor=(1, 0.5),
+                    fontsize=10,
+                    title_fontsize=11,
+                )
+                ax.set_title("Müşteri Bazında Ciro Dağılımı", color="#185a9d", fontsize=14)
+                ax.axis("equal")
 
-                chart_id = f"customer_pie_{uuid.uuid4().hex}"
-                chart_height = 420
-                chart_data = {
-                    "labels": legend_labels,
-                    "datasets": [
-                        {
-                            "data": values,
-                            "backgroundColor": colors,
-                            "borderWidth": 0,
-                        }
-                    ],
-                }
-                chart_options = {
-                    "plugins": {
-                        "legend": {
-                            "position": "right",
-                            "labels": {"boxWidth": 18, "font": {"size": 12}},
-                        }
-                    }
-                }
+                st.pyplot(fig, use_container_width=True)
+                plt.close(fig)
 
-                chart_html = f"""
-                <div style="position:relative; min-height:{chart_height}px;">
-                    <canvas id="{chart_id}" height="{chart_height}"></canvas>
-                </div>
-                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-                <script>
-                    const ctx = document.getElementById('{chart_id}').getContext('2d');
-                    if (window.customerPieCharts === undefined) {{
-                        window.customerPieCharts = {{}};
-                    }}
-                    if (window.customerPieCharts['{chart_id}']) {{
-                        window.customerPieCharts['{chart_id}'].destroy();
-                    }}
-                    if (typeof ChartDataLabels !== 'undefined') {{
-                        Chart.register(ChartDataLabels);
-                    }}
-                    const chartOptions = {json.dumps(chart_options)};
-                    chartOptions.plugins.tooltip = chartOptions.plugins.tooltip || {{}};
-                    chartOptions.plugins.tooltip.callbacks = chartOptions.plugins.tooltip.callbacks || {{}};
-                    chartOptions.plugins.tooltip.callbacks.label = function(context) {{
-                        const value = context.parsed;
-                        const total = {round(total_value, 2)};
-                        const percentage = total ? ((value / total) * 100).toFixed(1) : 0;
-                        const formatter = new Intl.NumberFormat('tr-TR', {{ style: 'decimal', maximumFractionDigits: 2 }});
-                        return context.label + ': ' + formatter.format(value) + ' USD (%' + percentage + ')';
-                    }};
-
-                    chartOptions.layout = chartOptions.layout || {{}};
-                    chartOptions.layout.padding = chartOptions.layout.padding || {{ top: 20, bottom: 20, left: 20, right: 20 }};
-                    chartOptions.plugins.datalabels = chartOptions.plugins.datalabels || {{}};
-                    chartOptions.plugins.datalabels.color = '#ffffff';
-                    chartOptions.plugins.datalabels.font = {{ weight: 'bold', size: 12 }};
-                    chartOptions.plugins.datalabels.anchor = 'center';
-                    chartOptions.plugins.datalabels.align = 'center';
-                    chartOptions.plugins.datalabels.offset = 0;
-                    chartOptions.plugins.datalabels.clamp = true;
-                    chartOptions.plugins.datalabels.formatter = function(value, context) {{
-                        const customerNames = {customer_names_js};
-                        const percentageValues = {percentage_values_js};
-                        const name = customerNames[context.dataIndex] || '';
-                        const pctValue = percentageValues[context.dataIndex];
-                        const pctText = (typeof pctValue === 'number' && !isNaN(pctValue)) ? ('%' + pctValue.toFixed(1)) : '';
-                        if (!name && !pctText) {{
-                            return '';
-                        }}
-                        return name + (pctText ? '\n' + pctText : '');
-                    }};
-                    chartOptions.rotation = 0;
-                    chartOptions.circumference = 360;
-                    chartOptions.maintainAspectRatio = false;
-                    window.customerPieCharts['{chart_id}'] = new Chart(ctx, {{
-                        type: 'pie',
-                        data: {json.dumps(chart_data)},
-                        options: chartOptions
-                    }});
-                </script>
-                """
-
-                components.html(chart_html, height=chart_height)
+                display_pie = pie_summary.copy()
+                display_pie["Tutar (USD)"] = display_pie["Tutar_num"].map(lambda x: f"{float(x):,.2f}")
+                display_pie["Yüzde (%)"] = display_pie["Yüzde"].map(lambda x: f"%{x:.1f}")
+                display_pie = display_pie[["Müşteri Adı", "Tutar (USD)", "Yüzde (%)"]]
+                st.dataframe(display_pie, use_container_width=True)
         else:
             st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
 
