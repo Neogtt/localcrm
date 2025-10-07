@@ -2,12 +2,17 @@ import streamlit as st
 import pandas as pd
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
-import io, os, datetime, tempfile, re, json, time, uuid
+import io, os, datetime, tempfile, re, json, time, uuid, html
 import numpy as np
 import smtplib
 from email.message import EmailMessage
+from email.utils import make_msgid
+import streamlit.components.v1 as components
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
+
+EMBED_IMAGES = True
 
 CURRENCY_SYMBOLS = ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]
 
@@ -55,6 +60,8 @@ USERS = {
 }
 if "user" not in st.session_state:
     st.session_state.user = None
+if "sync_status" not in st.session_state:
+    st.session_state.sync_status = None
 
 def login_screen():
     st.title("ŞEKEROĞLU CRM - Giriş Ekranı")
@@ -76,6 +83,17 @@ if not st.session_state.user:
 if st.sidebar.button("Çıkış Yap"):
     st.session_state.user = None
     st.rerun()
+
+def _request_manual_sync():
+    st.session_state["_sync_requested"] = True
+
+
+if st.session_state.sync_status:
+    status_type, status_msg = st.session_state.sync_status
+    display_fn = getattr(st, status_type, st.info)
+    display_fn(status_msg)
+
+st.sidebar.button("🔁 Excel Senkronizasyonu", on_click=_request_manual_sync)
 
 # --- Referans listeler ---
 ulke_listesi = sorted([
@@ -114,6 +132,342 @@ EXCEL_FILE_ID    = "1C8OpNAIRySkWYTI9jBaboV-Rq85UbVD9"
 EVRAK_KLASOR_ID  = "14FTE1oSeIeJ6Y_7C0oQyZPKC8dK8hr1J"
 FIYAT_TEKLIFI_ID = "1TNjwx-xhmlxNRI3ggCJA7jaCAu9Lt_65"
 
+COUNTRY_LANGUAGE_MAP = {
+    "Türkiye": "tr",
+    "Amerika Birleşik Devletleri": "en",
+    "Birleşik Krallık": "en",
+    "Kanada": "en",
+    "Avustralya": "en",
+    "Almanya": "de",
+    "Avusturya": "de",
+    "İsviçre": "de",
+    "Fransa": "fr",
+    "Belçika": "fr",
+    "İspanya": "es",
+    "Meksika": "es",
+    "Kolombiya": "es",
+    "Arjantin": "es",
+    "Birleşik Arap Emirlikleri": "ar",
+    "Suudi Arabistan": "ar",
+    "Katar": "ar",
+    "Kuveyt": "ar",
+}
+
+FAIR_MAIL_TEMPLATES = {
+    "tr": {
+        "subject": "Fuar Görüşmemiz Hakkında",
+        "body": (
+            "Merhaba,\n\n"
+            "Fuarda standımızı ziyaret ettiğiniz için teşekkür ederiz. Sunduğumuz ürün ve"
+            " çözümler hakkında sorularınızı yanıtlamaktan memnuniyet duyarız."
+            "\n\n"
+            "İhtiyaçlarınızı daha iyi anlayabilmek ve iş birliği fırsatlarını görüşmek için"
+            " uygun olduğunuz bir zamanı paylaşmanızı rica ederiz.\n\n"
+            "Saygılarımızla,\nŞekeroğlu İhracat Ekibi"
+        ),
+    },
+    "en": {
+        "subject": "Thank You for Visiting Şekeroğlu at the Fair",
+        "body": (
+            "Hello,\n\n"
+            "Thank you for taking the time to meet with us during the trade fair. We would"
+            " be delighted to continue the conversation and share tailored solutions for"
+            " your business.\n\n"
+            "Please let us know a convenient time for a follow-up call or meeting so that"
+            " we can discuss the next steps together.\n\n"
+            "Best regards,\nŞekeroğlu Export Team"
+        ),
+    },
+    "de": {
+        "subject": "Vielen Dank für Ihren Besuch auf unserem Messestand",
+        "body": (
+            "Guten Tag,\n\n"
+            "herzlichen Dank für das Gespräch an unserem Stand. Gerne senden wir Ihnen"
+            " weitere Informationen zu unseren Produkten und prüfen gemeinsame"
+            " Geschäftsmöglichkeiten.\n\n"
+            "Teilen Sie uns bitte mit, wann wir Sie für ein kurzes Nachgespräch erreichen"
+            " können.\n\n"
+            "Mit freundlichen Grüßen\nŞekeroğlu Export Team"
+        ),
+    },
+    "fr": {
+        "subject": "Suite à notre rencontre sur le salon",
+        "body": (
+            "Bonjour,\n\n"
+            "Nous vous remercions d’avoir visité notre stand lors du salon. Nous serions"
+            " ravis de poursuivre nos échanges et de vous proposer des solutions adaptées"
+            " à vos besoins.\n\n"
+            "N’hésitez pas à nous indiquer vos disponibilités pour un échange complémentaire."
+            "\n\n"
+            "Cordialement,\nÉquipe Export Şekeroğlu"
+        ),
+    },
+    "es": {
+        "subject": "Seguimiento de nuestra reunión en la feria",
+        "body": (
+            "Hola,\n\n"
+            "Muchas gracias por visitarnos durante la feria. Queremos continuar la"
+            " conversación y presentarle nuestras soluciones ajustadas a sus necesidades."
+            "\n\n"
+            "Por favor, indíquenos cuándo podemos coordinar una reunión o llamada de"
+            " seguimiento.\n\n"
+            "Saludos cordiales,\nEquipo de Exportación Şekeroğlu"
+        ),
+    },
+    "ar": {
+        "subject": "متابعة بعد زيارتكم لجناحنا في المعرض",
+        "body": (
+            "مرحباً،\n\n"
+            "نشكر لكم زيارتكم لجناحنا خلال المعرض واهتمامكم بمنتجات شكر أوغلو. يسعدنا"
+            " تزويدكم بمعلومات إضافية وبحث فرص التعاون المشتركة.\n\n"
+            "يرجى تزويدنا بالوقت المناسب للتواصل معكم والحديث عن الخطوات القادمة.\n\n"
+            "مع أطيب التحيات،\nفريق تصدير شكر أوغلو"
+        ),
+    },
+}
+
+HOLIDAY_MAIL_TEMPLATES = {
+    "Ramazan Bayramı": {
+        "tr": {
+            "subject": "Ramazan Bayramınız Kutlu Olsun",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
+                " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
+                " günler temenni ederiz.</p>"
+                "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy Eid al-Fitr",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you"
+                " for your trust and cooperation.</p>"
+                "<p>Best regards,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Zuckerfest",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>wir wünschen Ihnen und Ihren Liebsten ein gesegnetes und"
+                " erfolgreiches Zuckerfest. Vielen Dank für die vertrauensvolle"
+                " Zusammenarbeit.</p>"
+                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne fête de l’Aïd al-Fitr",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Nous vous souhaitons une fête de l’Aïd al-Fitr pleine de joie et de"
+                " prospérité. Merci pour votre confiance et votre collaboration.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Eid al-Fitr",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Le deseamos un Eid al-Fitr lleno de alegría y prosperidad. Gracias"
+                " por su confianza y cooperación.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "عيد فطر سعيد",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نهنئكم بعيد الفطر المبارك ونتمنى لكم ولعائلتكم أياماً مليئة"
+                " بالخير والنجاح. نشكركم على ثقتكم وشراكتكم المستمرة.</p>"
+                "<p>مع أطيب التحيات،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+    "Kurban Bayramı": {
+        "tr": {
+            "subject": "Kurban Bayramınız Kutlu Olsun",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne"
+                " kadar gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
+                "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy Eid al-Adha",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>May this Eid al-Adha bring peace, happiness, and success to you and"
+                " your loved ones. Thank you for your continued cooperation.</p>"
+                "<p>Sincerely,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Opferfest",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>möge das Opferfest Ihnen und Ihrem Team Frieden, Gesundheit und"
+                " Erfolg bringen. Wir danken Ihnen für die gute Zusammenarbeit.</p>"
+                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne fête de l’Aïd al-Adha",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Que cette fête de l’Aïd al-Adha vous apporte paix, bonheur et"
+                " réussite. Merci pour votre collaboration précieuse.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Eid al-Adha",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Que este Eid al-Adha le traiga paz, felicidad y éxito a usted y a"
+                " su equipo. Gracias por su apoyo continuo.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "عيد أضحى مبارك",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نتمنى أن يحمل لكم عيد الأضحى المبارك السلام والسعادة والنجاح،"
+                " ونشكركم على تعاونكم المستمر.</p>"
+                "<p>مع خالص التقدير،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+    "Yeni Yıl": {
+        "tr": {
+            "subject": "Mutlu Yıllar",
+            "body": (
+                "<p>Değerli iş ortağımız,</p>"
+                "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür"
+                " ederiz. Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı"
+                " getirmesini dileriz.</p>"
+                "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "en": {
+            "subject": "Happy New Year",
+            "body": (
+                "<p>Dear business partner,</p>"
+                "<p>Thank you for the trust and partnership throughout the past year. We"
+                " wish you and your team a healthy and prosperous New Year.</p>"
+                "<p>Warm regards,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "de": {
+            "subject": "Frohes Neues Jahr",
+            "body": (
+                "<p>Sehr geehrter Geschäftspartner,</p>"
+                "<p>vielen Dank für Ihre Unterstützung im vergangenen Jahr. Wir wünschen"
+                " Ihnen und Ihrem Team ein gesundes und erfolgreiches neues Jahr.</p>"
+                "<p>Mit besten Grüßen,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "fr": {
+            "subject": "Bonne année",
+            "body": (
+                "<p>Cher partenaire,</p>"
+                "<p>Merci pour votre confiance tout au long de l’année écoulée. Nous vous"
+                " souhaitons, à vous et à votre équipe, une nouvelle année pleine de"
+                " santé et de réussite.</p>"
+                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "es": {
+            "subject": "Feliz Año Nuevo",
+            "body": (
+                "<p>Estimado socio,</p>"
+                "<p>Gracias por su confianza y colaboración durante el último año. Les"
+                " deseamos a usted y a su equipo un Año Nuevo lleno de salud y"
+                " prosperidad.</p>"
+                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+            ),
+        },
+        "ar": {
+            "subject": "سنة جديدة سعيدة",
+            "body": (
+                "<p>شريكنا العزيز،</p>"
+                "<p>نشكر لكم ثقتكم وشراكتكم طوال العام الماضي، ونتمنى لكم ولفريقكم"
+                " عاماً جديداً مليئاً بالصحة والنجاح.</p>"
+                "<p>مع أطيب الأمنيات،<br>مجموعة شكر أوغلو</p>"
+            ),
+        },
+    },
+}
+
+HOLIDAY_FALLBACK_TEMPLATES = {
+    "Ramazan Bayramı": {
+        "subject": "Ramazan Bayramınız Kutlu Olsun / Happy Eid al-Fitr",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
+            " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
+            " günler temenni ederiz.</p>"
+            "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you for"
+            " your trust and cooperation.</p>"
+            "<p>Best regards,<br>Sekeroğlu Group</p>"
+        ),
+    },
+    "Kurban Bayramı": {
+        "subject": "Kurban Bayramınız Kutlu Olsun / Happy Eid al-Adha",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne kadar"
+            " gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
+            "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>May this Eid al-Adha bring peace, happiness and success to you and your"
+            " loved ones.</p>"
+            "<p>Sincerely,<br>Sekeroğlu Group</p>"
+        ),
+    },
+    "Yeni Yıl": {
+        "subject": "Mutlu Yıllar / Happy New Year",
+        "body": (
+            "<p>Değerli iş ortağımız,</p>"
+            "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür ederiz."
+            " Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı getirmesini dileriz.</p>"
+            "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<hr>"
+            "<p>Dear business partner,</p>"
+            "<p>Thank you for the trust and partnership throughout the past year. Wishing"
+            " you a healthy and prosperous New Year.</p>"
+            "<p>Warm regards,<br>Sekeroğlu Group</p>"
+        ),
+    },
+}
+
+LANGUAGE_LABELS = {
+    "tr": "Türkçe",
+    "en": "English",
+    "de": "Deutsch",
+    "fr": "Français",
+    "es": "Español",
+    "ar": "العربية",
+}
+
+
+def get_holiday_template_content(template_name, language_code):
+    template = HOLIDAY_MAIL_TEMPLATES.get(template_name, {})
+    content = template.get(language_code)
+    if content:
+        return content, False
+    fallback = HOLIDAY_FALLBACK_TEMPLATES.get(template_name)
+    if fallback:
+        return fallback, True
+    return None, False
+
 
 
 # --- LOGO (WEB LINKİNDEN AL) ---
@@ -147,76 +501,82 @@ downloaded = drive.CreateFile({'id': EXCEL_FILE_ID})
 downloaded.FetchMetadata(fetch_all=True)
 downloaded.GetContentFile("temp.xlsx")
 
-# --- Dataframe yükleme ---
-if os.path.exists("temp.xlsx"):
-    try:
-        df_musteri = pd.read_excel("temp.xlsx", sheet_name=0)
-    except Exception:
+
+def load_dataframes_from_excel(path: str = "temp.xlsx"):
+    global df_musteri, df_kayit, df_teklif, df_proforma, df_evrak, df_eta, df_fuar_musteri
+
+    if os.path.exists(path):
+        try:
+            df_musteri = pd.read_excel(path, sheet_name=0)
+        except Exception:
+            df_musteri = pd.DataFrame(columns=[
+                "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
+            ])
+        try:
+            df_kayit = pd.read_excel(path, sheet_name="Kayıtlar")
+        except Exception:
+            df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
+        try:
+            df_teklif = pd.read_excel(path, sheet_name="Teklifler")
+        except Exception:
+            df_teklif = pd.DataFrame(columns=[
+                "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
+            ])
+        try:
+            df_proforma = pd.read_excel(path, sheet_name="Proformalar")
+            for col in ["Proforma No", "Vade", "Sevk Durumu"]:
+                if col not in df_proforma.columns:
+                    df_proforma[col] = ""
+        except Exception:
+            df_proforma = pd.DataFrame(columns=[
+                "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
+            ])
+        try:
+            df_evrak = pd.read_excel(path, sheet_name="Evraklar")
+            for col in ["Yük Resimleri", "EK Belgeler"]:
+                if col not in df_evrak.columns:
+                    df_evrak[col] = ""
+        except Exception:
+            df_evrak = pd.DataFrame(columns=[
+                "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
+                "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+                "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
+                "Yük Resimleri", "EK Belgeler"
+            ])
+        try:
+            df_eta = pd.read_excel(path, sheet_name="ETA")
+        except Exception:
+            df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+        try:
+            df_fuar_musteri = pd.read_excel(path, sheet_name="FuarMusteri")
+        except Exception:
+            df_fuar_musteri = pd.DataFrame(columns=[
+                "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
+            ])
+    else:
         df_musteri = pd.DataFrame(columns=[
             "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
         ])
-    try:
-        df_kayit = pd.read_excel("temp.xlsx", sheet_name="Kayıtlar")
-    except Exception:
         df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
-    try:
-        df_teklif = pd.read_excel("temp.xlsx", sheet_name="Teklifler")
-    except Exception:
         df_teklif = pd.DataFrame(columns=[
             "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
         ])
-    try:
-        df_proforma = pd.read_excel("temp.xlsx", sheet_name="Proformalar")
-        for col in ["Proforma No", "Vade", "Sevk Durumu"]:
-            if col not in df_proforma.columns:
-                df_proforma[col] = ""
-    except Exception:
         df_proforma = pd.DataFrame(columns=[
             "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
         ])
-    try:
-        df_evrak = pd.read_excel("temp.xlsx", sheet_name="Evraklar")
-        for col in ["Yük Resimleri", "EK Belgeler"]:
-            if col not in df_evrak.columns:
-                df_evrak[col] = ""
-    except Exception:
         df_evrak = pd.DataFrame(columns=[
             "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
             "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
             "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
             "Yük Resimleri", "EK Belgeler"
         ])
-    try:
-        df_eta = pd.read_excel("temp.xlsx", sheet_name="ETA")
-    except Exception:
         df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
-    try:
-        df_fuar_musteri = pd.read_excel("temp.xlsx", sheet_name="FuarMusteri")
-    except Exception:
         df_fuar_musteri = pd.DataFrame(columns=[
             "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
         ])
-else:
-    df_musteri = pd.DataFrame(columns=[
-        "Müşteri Adı", "Telefon", "E-posta", "Adres", "Ülke", "Satış Temsilcisi", "Kategori", "Durum", "Vade (Gün)", "Ödeme Şekli"
-    ])
-    df_kayit = pd.DataFrame(columns=["Müşteri Adı", "Tarih", "Tip", "Açıklama"])
-    df_teklif = pd.DataFrame(columns=[
-        "Müşteri Adı", "Tarih", "Teklif No", "Tutar", "Ürün/Hizmet", "Açıklama", "Durum", "PDF"
-    ])
-    df_proforma = pd.DataFrame(columns=[
-        "Müşteri Adı", "Tarih", "Proforma No", "Tutar", "Açıklama", "Durum", "PDF", "Sipariş Formu", "Vade", "Sevk Durumu"
-    ])
-    df_evrak = pd.DataFrame(columns=[
-        "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
-        "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
-        "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
-        "Yük Resimleri", "EK Belgeler"
-    ])
-    df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
-    df_fuar_musteri = pd.DataFrame(columns=[
-        "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
-    ])
+
+
+load_dataframes_from_excel()
 
 def update_excel():
     buffer = io.BytesIO()
@@ -233,6 +593,55 @@ def update_excel():
         f.write(buffer.read())
     downloaded.SetContentFile("temp.xlsx")
     downloaded.Upload()
+
+
+
+def sync_excel_bidirectional():
+    global downloaded
+
+    try:
+        downloaded.FetchMetadata(fetch_all=True)
+        remote_raw = downloaded.get('modifiedDate') or downloaded.get('modifiedTime')
+        remote_ts = None
+        if remote_raw:
+            remote_ts = pd.to_datetime(remote_raw, utc=True).tz_convert(None).to_pydatetime()
+    except Exception as e:
+        st.session_state.sync_status = ("error", f"Drive meta verisi alınamadı: {e}")
+        return
+
+    local_exists = os.path.exists("temp.xlsx")
+    local_ts = None
+    if local_exists:
+        try:
+            local_ts = datetime.datetime.fromtimestamp(os.path.getmtime("temp.xlsx"))
+        except Exception:
+            local_ts = None
+
+    tolerance = datetime.timedelta(seconds=2)
+
+    if not local_exists or (remote_ts and (local_ts is None or remote_ts - local_ts > tolerance)):
+        try:
+            downloaded.GetContentFile("temp.xlsx")
+            load_dataframes_from_excel()
+            st.session_state.sync_status = ("success", "Google Drive dosyası daha güncel bulundu; yerel kopya yenilendi.")
+        except Exception as e:
+            st.session_state.sync_status = ("error", f"Drive'dan dosya indirilirken hata oluştu: {e}")
+        return
+
+    if remote_ts and local_ts and (local_ts - remote_ts > tolerance):
+        try:
+            downloaded.SetContentFile("temp.xlsx")
+            downloaded.Upload()
+            st.session_state.sync_status = ("success", "Yerel dosya daha güncel bulundu; Drive üzerindeki dosya güncellendi.")
+        except Exception as e:
+            st.session_state.sync_status = ("error", f"Drive'a dosya yüklenirken hata oluştu: {e}")
+    else:
+        st.session_state.sync_status = ("info", "Dosyalar zaten senkron görünüyor.")
+
+
+if st.session_state.pop("_sync_requested", False):
+    sync_excel_bidirectional()
+
 
 # ===========================
 # ==== GOOGLE SHEETS (MÜŞTERİ) SENKRON
@@ -307,9 +716,89 @@ def yeni_cari_txt_olustur(cari_dict, file_path="yeni_cari.txt"):
             f"Para Birimi: {cari_dict.get('Para Birimi', '')}\n"  # Para birimini de ekliyoruz
             f"DT Seçimi: {cari_dict.get('DT Seçimi', '')}\n"  # DT seçimini de ekliyoruz
         )
+# --- E-POSTA İMZA YARDIMCILARI ---
+
+SIGNATURE_PROFILES = {
+    "admin": {
+        "full_name": "KEMAL İLKER ÇELİKKALKAN",
+        "title": "Export Manager",
+    },
+    "export1": {
+        "full_name": "HÜSEYİN POLAT",
+        "title": "Export Area Sales Manager",
+    },
+    "Boss": {
+        "full_name": "FERHAT ŞEKEROĞLU",
+        "title": "MEMBER OF BOARD",
+    },
+}
+
+SIGNATURE_BASE_INFO = {
+    "company": "ŞEKEROĞLU GROUP",
+    "department": "International Sales & Export",
+    "phone": "+90 (342) 337 09 09",
+    "email": "export1@sekeroglugroup.com",
+    "website": "https://www.sekeroglugroup.com",
+    "address": "Sanayi mah. 60129 No'lu Cad. No : 7 Şehitkamil / Gaziantep",
+    }
+
+
+def _active_signature_info():
+    user = st.session_state.get("user") if "user" in st.session_state else None
+    info = SIGNATURE_PROFILES.get(user)
+    if not info:
+        info = {
+            "full_name": "ŞEKEROĞLU EXPORT TEAM",
+            "title": "International Sales Representative",
+        }
+    return info
+
+
+def text_signature() -> str:
+    info = _active_signature_info()
+    base = SIGNATURE_BASE_INFO
+    lines = [
+        info["full_name"],
+        info["title"],
+        f"{base['company']} | {base['department']}",
+        f"Telefon: {base['phone']}",
+        f"E-posta: {base['email']}",
+        f"Web: {base['website']}",
+        f"Adres: {base['address']}",
+    ]
+    return "\n".join(lines)
+
+
+def html_signature() -> str:
+    info = _active_signature_info()
+    base = SIGNATURE_BASE_INFO
+    name = html.escape(info["full_name"])
+    title = html.escape(info["title"])
+    company = html.escape(base["company"])
+    department = html.escape(base["department"])
+    phone = html.escape(base["phone"])
+    email = html.escape(base["email"])
+    website = html.escape(base["website"])
+    address = html.escape(base["address"])
+
+    return (
+        "<table cellpadding=\"0\" cellspacing=\"0\" style=\"font-family:Arial,sans-serif;color:#333333;\">"
+        f"<tr><td style='font-size:16px;font-weight:bold;color:#219A41;'>{name}</td></tr>"
+        f"<tr><td style='font-size:13px;color:#555555;'>{title}</td></tr>"
+        "<tr><td style='padding-top:10px;font-size:13px;color:#333333;'>"
+        f"<div style='font-weight:bold;color:#219A41;'>{company}</div>"
+        f"<div>{department}</div>"
+        f"<div>Telefon: {phone}</div>"
+        f"<div>E-posta: <a href='mailto:{email}' style='color:#219A41;text-decoration:none;'>{email}</a></div>"
+        f"<div>Web: <a href='{website}' style='color:#219A41;text-decoration:none;'>{website}</a></div>"
+        f"<div>{address}</div>"
+        "</td></tr>"
+        "</table>"
+    )
+
 
 # E-posta göndermek için fonksiyon
-def send_email_with_txt(to_email, subject, body, file_path):
+def send_email(to_email, subject, body, attachments=None, fallback_txt_path=None):
     from_email = "todo@sekeroglugroup.com"  # Gönderen e-posta adresi
     password = "vbgvforwwbcpzhxf"  # Gönderen e-posta şifresi
 
@@ -317,22 +806,203 @@ def send_email_with_txt(to_email, subject, body, file_path):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = ", ".join(to_email)  # Birden fazla alıcıyı virgülle ayırarak ekliyoruz
+
+    
+    if isinstance(to_email, (str, bytes)):
+        recipients = [to_email.decode() if isinstance(to_email, bytes) else to_email]
+    else:
+        recipients = [addr for addr in to_email if addr]
+
+    if not recipients:
+        raise ValueError("En az bir geçerli alıcı e-posta adresi sağlanmalıdır.")
+
+    msg["To"] = from_email
+    msg["Bcc"] = ", ".join(recipients)
     msg.set_content(body)
 
-    # TXT dosyasını e-postaya ekle
-    with open(file_path, "rb") as f:
+    prepared_attachments = attachments or []
+
+    for attachment in prepared_attachments:
+        if not isinstance(attachment, (tuple, list)) or len(attachment) != 3:
+            continue
+
+        filename, content_bytes, mime_type = attachment
+
+        if isinstance(content_bytes, memoryview):
+            content_bytes = content_bytes.tobytes()
+
+        if not isinstance(content_bytes, (bytes, bytearray)):
+            content_bytes = bytes(content_bytes)
+
+        mime = (mime_type or "application/octet-stream").strip()
+        if "/" in mime:
+            maintype, subtype = mime.split("/", 1)
+        else:
+            maintype, subtype = mime, "octet-stream"
+
         msg.add_attachment(
-            f.read(),
-            maintype="text",
-            subtype="plain",
-            filename="yeni_cari.txt"  # Dosyanın ismi
+           bytes(content_bytes),
+            maintype=maintype,
+            subtype=subtype,
+            filename=filename,
         )
+
+    if not prepared_attachments and fallback_txt_path:
+        try:
+            with open(fallback_txt_path, "rb") as f:
+                msg.add_attachment(
+                    f.read(),
+                    maintype="text",
+                    subtype="plain",
+                    filename=os.path.basename(fallback_txt_path) or "yeni_cari.txt",
+                )
+        except FileNotFoundError:
+            pass
+
 
     # E-posta göndermek için SMTP kullan
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(from_email, password)
         smtp.send_message(msg)
+
+def extract_unique_emails(email_series: pd.Series) -> list:
+    emails = []
+    if email_series is None:
+        return emails
+    for raw in email_series.dropna():
+        raw_str = str(raw).strip()
+        if not raw_str:
+            continue
+        parts = re.split(r"[;,\s]+", raw_str)
+        for part in parts:
+            address = part.strip()
+            if address:
+                emails.append(address)
+    # Benzersiz ve alfabetik sırada döndür
+    seen = {}
+    for mail in emails:
+        key = mail.lower()
+        if key not in seen:
+            seen[key] = mail
+    return sorted(seen.values(), key=lambda x: x.lower())
+
+
+def send_fair_bulk_email(to_emails, subject, body, attachments=None, embed_images=None, inline_cid_map=None):
+    if not to_emails:
+        raise ValueError("E-posta alıcı listesi boş olamaz.")
+
+    from_email = "todo@sekeroglugroup.com"
+    password = "vbgvforwwbcpzhxf"
+
+    embed_images = EMBED_IMAGES if embed_images is None else bool(embed_images)
+    inline_cid_map = inline_cid_map or {}
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = from_email
+    msg["Bcc"] = ", ".join(to_emails)
+    body_text = (body or "").strip()
+    if body_text:
+        plain_body = f"{body_text}\n\n{text_signature()}"
+    else:
+        plain_body = text_signature()
+    msg.set_content(plain_body)
+
+    escaped_body = html.escape(body_text).replace("\n", "<br>") if body_text else ""
+
+    attachments = attachments or []
+    inline_images = []
+    download_errors = []
+    other_attachments = []
+    
+    for uploaded_file in attachments:
+        if uploaded_file is None:
+            continue
+        try:
+            file_bytes = uploaded_file.getvalue()
+        except Exception as exc:
+            download_errors.append(f"{getattr(uploaded_file, 'name', 'Dosya')} okunamadı: {exc}")
+            continue
+
+        maintype, subtype = "application", "octet-stream"
+        mime_type = uploaded_file.type or ""
+        if mime_type:
+            try:
+                maintype, subtype = mime_type.split("/", 1)
+            except ValueError:
+                maintype, subtype = mime_type, "octet-stream"
+
+        attachment_key = f"{uploaded_file.name}:{len(file_bytes)}"
+
+        if embed_images and maintype == "image":
+            cid = make_msgid()
+            cid = inline_cid_map.get(attachment_key, cid)
+            inline_images.append({
+                "data": file_bytes,
+                "maintype": maintype,
+                "subtype": subtype,
+                "filename": uploaded_file.name,
+                "cid": cid,
+                "key": attachment_key,
+            })
+        else:
+            other_attachments.append({
+                "data": file_bytes,
+                "maintype": maintype,
+                "subtype": subtype,
+                "filename": uploaded_file.name,
+            })
+
+    if download_errors:
+        raise RuntimeError("; ".join(download_errors))
+
+    image_blocks = []
+    if embed_images and inline_images:
+        for image in inline_images:
+            cid_clean = image["cid"].strip("<>")
+            alt_text = html.escape(image["filename"]) if image["filename"] else "Görsel"
+            image_blocks.append(
+                "<div style='margin-top:12px; text-align:center;'>"
+                f"<img src=\"cid:{cid_clean}\" alt=\"{alt_text}\" style='max-width:100%; height:auto;'>"
+                "</div>"
+            )
+
+    html_sections = ["<div style='font-family:Arial,sans-serif;color:#333333;'>"]
+    if escaped_body:
+        html_sections.append(escaped_body)
+    if image_blocks:
+        html_sections.extend(image_blocks)
+    html_sections.append("</div>")
+    html_sections.append(f"<div style='margin-top:16px;'>{html_signature()}</div>")
+    html_body = "".join(html_sections)
+
+    html_part = msg.add_alternative(html_body, subtype="html")
+
+    for image in inline_images:
+        html_part.add_related(
+            image["data"],
+            maintype=image["maintype"],
+            subtype=image["subtype"],
+            cid=image["cid"],
+            filename=image["filename"] or None,
+        )
+
+    for attachment in other_attachments:
+        msg.add_attachment(
+            attachment["data"],
+            maintype=attachment["maintype"],
+            subtype=attachment["subtype"],
+            filename=attachment["filename"],
+        )
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(from_email, password)
+            smtp.send_message(msg)
+    except smtplib.SMTPException as exc:
+        raise RuntimeError(f"SMTP hatası: {exc}") from exc
+
 
 
 
@@ -356,6 +1026,7 @@ menuler = [
     ("Fuar Kayıtları", "🎫"),
     ("İçerik Arşivi", "🗂️"),
     ("Satış Analitiği", "📈"),
+    ("Özel Gün Tebrikleri", "🎉"),
 ]
 
 # 2) Tüm kullanıcılar için aynı menüler
@@ -402,6 +1073,7 @@ div[data-testid="stSidebar"] .stRadio label:nth-child(10) { background: linear-g
 div[data-testid="stSidebar"] .stRadio label:nth-child(11) { background: linear-gradient(90deg,#8e54e9,#bd4de6); }  /* Fuar */
 div[data-testid="stSidebar"] .stRadio label:nth-child(12) { background: linear-gradient(90deg,#4b79a1,#283e51); }  /* Medya */
 div[data-testid="stSidebar"] .stRadio label:nth-child(13) { background: linear-gradient(90deg,#2b5876,#4e4376); }  /* Satış Perf. */
+div[data-testid="stSidebar"] .stRadio label:nth-child(14) { background: linear-gradient(90deg,#ffafbd,#ffc3a0); }  /* Tebrikler */
 </style>
 """, unsafe_allow_html=True)
 
@@ -432,6 +1104,8 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
     if st.button("Müşterileri Sheets’e Yaz"):
         push_customers_throttled()
 
+
+
 ### ===========================
 ### === GENEL BAKIŞ (Vade Durumu Dahil) ===
 ### ===========================
@@ -439,40 +1113,17 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
 if menu == "Genel Bakış":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Genel Bakış</h2>", unsafe_allow_html=True)
 
-    
+    invoices_df = df_evrak.copy()
+    if "Tutar" not in invoices_df.columns:
+        invoices_df["Tutar"] = 0
+    invoices_df["Tutar_num"] = invoices_df["Tutar"].apply(smart_to_num).fillna(0.0)
+    toplam_fatura_tutar = float(invoices_df["Tutar_num"].sum())
 
-    # ---------- Toplam Fatura ----------
-    toplam_fatura_tutar = 0.0
-    if "Tutar" in df_evrak.columns and not df_evrak.empty:
-        df_evrak = df_evrak.copy()
-        df_evrak["Tutar_num"] = df_evrak["Tutar"].apply(smart_to_num).fillna(0.0)
-        toplam_fatura_tutar = float(df_evrak["Tutar_num"].sum())
-    st.markdown(f"<div style='font-size:1.5em; color:#d35400; font-weight:bold;'>Toplam Fatura Tutarı: {toplam_fatura_tutar:,.2f} USD</div>", unsafe_allow_html=True)
-
-    # ---------- Vade Durumu Kutucukları ----------
-    for col in ["Vade Tarihi", "Ödendi"]:
-        if col not in df_evrak.columns:
-            df_evrak[col] = "" if col == "Vade Tarihi" else False
-
-    vade_ts = pd.to_datetime(df_evrak["Vade Tarihi"], errors="coerce")
+    date_col = next((col for col in ["Fatura Tarihi", "Tarih"] if col in invoices_df.columns), None)
     today_norm = pd.Timestamp.today().normalize()
 
-    od_me = ~df_evrak["Ödendi"].astype(bool)
-    vadesi_gelmemis_m = (vade_ts > today_norm) & od_me
-    vadesi_bugun_m     = (vade_ts.dt.date == today_norm.date()) & od_me
-    gecikmis_m         = (vade_ts < today_norm) & od_me
-
-    tg_sum = float(df_evrak.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
-    tb_sum = float(df_evrak.loc[vadesi_bugun_m, "Tutar_num"].sum())
-    gec_sum = float(df_evrak.loc[gecikmis_m, "Tutar_num"].sum())
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
-    c2.metric("Bugün Vadesi Dolan", f"{tb_sum:,.2f} USD", f"{int(vadesi_bugun_m.sum())} Fatura")
-    c3.metric("Geciken Ödemeler", f"{gec_sum:,.2f} USD", f"{int(gecikmis_m.sum())} Fatura")
-
-    st.markdown("---")
-
+    if date_col:
+        invoices_df[date_col] = pd.to_datetime(invoices_df[date_col], errors="coerce")
     # ---- Bekleyen Teklifler ----
     st.markdown("### Bekleyen Teklifler")
     bekleyen_teklifler = df_teklif[df_teklif["Durum"] == "Açık"] if "Durum" in df_teklif.columns else pd.DataFrame()
@@ -500,12 +1151,16 @@ if menu == "Genel Bakış":
         st.dataframe(bekleyen_proformalar[["Müşteri Adı", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
 
     # ---- Sevk Bekleyen Siparişler ----
-    st.markdown("### Sevk Bekleyen Siparişler")
+
     if "Sevk Durumu" not in df_proforma.columns:
         df_proforma["Sevk Durumu"] = ""
     if "Ülke" not in df_proforma.columns:
         df_proforma["Ülke"] = ""
+    if "Termin Tarihi" not in df_proforma.columns:
+        df_proforma["Termin Tarihi"] = ""     
     sevk_bekleyenler = df_proforma[(df_proforma["Durum"] == "Siparişe Dönüştü") & (~df_proforma["Sevk Durumu"].isin(["Sevkedildi", "Ulaşıldı"]))] if "Durum" in df_proforma.columns else pd.DataFrame()
+    sevk_bekleyen_sayisi = len(sevk_bekleyenler)
+    st.markdown(f"### Sevk Bekleyen Siparişler ({sevk_bekleyen_sayisi} Adet)")
     try:
         toplam_siparis = pd.to_numeric(sevk_bekleyenler["Tutar"], errors="coerce").sum()
     except:
@@ -514,7 +1169,30 @@ if menu == "Genel Bakış":
     if sevk_bekleyenler.empty:
         st.info("Sevk bekleyen sipariş yok.")
     else:
-        st.dataframe(sevk_bekleyenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+        sevk_bekleyenler = sevk_bekleyenler.copy()
+        sevk_bekleyenler["Termin Tarihi"] = pd.to_datetime(
+            sevk_bekleyenler["Termin Tarihi"], errors="coerce"
+        )
+        sevk_bekleyenler = sevk_bekleyenler.sort_values(
+            by="Termin Tarihi", ascending=True, na_position="last"
+        )
+        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].dt.strftime("%d/%m/%Y")
+        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].fillna("")
+        st.dataframe(
+            sevk_bekleyenler[
+                [
+                    "Müşteri Adı",
+                    "Ülke",
+                    "Proforma No",
+                    "Tarih",
+                    "Termin Tarihi",
+                    "Tutar",
+                    "Vade (gün)",
+                    "Açıklama",
+                ]
+            ],
+            use_container_width=True,
+        )       
 
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
@@ -527,8 +1205,45 @@ if menu == "Genel Bakış":
     if eta_yolda.empty:
         st.info("Yolda olan (sevk edilmiş) sipariş yok.")
     else:
-        st.dataframe(eta_yolda[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+        eta_display = eta_yolda.copy()
+        eta_display["Proforma No"] = eta_display["Proforma No"].astype(str)
 
+        if not df_eta.empty:
+            eta_lookup = df_eta.copy()
+            eta_lookup["Proforma No"] = eta_lookup["Proforma No"].astype(str)
+            eta_lookup = eta_lookup.sort_values(by="ETA Tarihi", kind="stable")
+            eta_lookup = eta_lookup.drop_duplicates(subset=["Proforma No"], keep="last")
+            eta_display = eta_display.merge(
+                eta_lookup[["Proforma No", "ETA Tarihi"]],
+                on="Proforma No",
+                how="left",
+            )
+        else:
+            eta_display["ETA Tarihi"] = pd.NaT
+
+        eta_display["ETA Tarihi"] = pd.to_datetime(eta_display["ETA Tarihi"], errors="coerce")
+        eta_display = eta_display.sort_values(
+            by="ETA Tarihi",
+            ascending=True,
+            na_position="last",
+            kind="stable",
+        )
+        eta_display["ETA Tarihi"] = eta_display["ETA Tarihi"].dt.strftime("%d/%m/%Y")
+        eta_display["ETA Tarihi"] = eta_display["ETA Tarihi"].fillna("").replace({"NaT": ""})
+
+        st.dataframe(
+            eta_display[[
+                "Müşteri Adı",
+                "Ülke",
+                "Proforma No",
+                "Tarih",
+                "ETA Tarihi",
+                "Tutar",
+                "Vade (gün)",
+                "Açıklama",
+            ]],
+            use_container_width=True,
+        )      
     # ---- Son Teslim Edilen Siparişler ----
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
@@ -543,12 +1258,32 @@ if menu == "Genel Bakış":
 
     # ---- Vade Takibi Tablosu (HERKES GÖRÜR) ----
     st.markdown("### Vadeli Fatura ve Tahsilat Takibi")
-    for col in ["Proforma No", "Vade (gün)", "Ödendi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli"]:
-        if col not in df_evrak.columns:
-            df_evrak[col] = "" if col != "Ödendi" else False
-    df_evrak["Ödendi"] = df_evrak["Ödendi"].fillna(False).astype(bool)
 
-    vade_df = df_evrak[df_evrak["Vade Tarihi"].notna() & (~df_evrak["Ödendi"])].copy()
+    for col in ["Vade Tarihi", "Ödendi"]:
+        if col not in invoices_df.columns:
+            invoices_df[col] = "" if col == "Vade Tarihi" else False
+
+    vade_ts = pd.to_datetime(invoices_df["Vade Tarihi"], errors="coerce")
+    od_me = ~invoices_df["Ödendi"].astype(bool)
+    vadesi_gelmemis_m = (vade_ts > today_norm) & od_me
+    vadesi_bugun_m = (vade_ts.dt.date == today_norm.date()) & od_me
+    gecikmis_m = (vade_ts < today_norm) & od_me
+
+    tg_sum = float(invoices_df.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
+    tb_sum = float(invoices_df.loc[vadesi_bugun_m, "Tutar_num"].sum())
+    gec_sum = float(invoices_df.loc[gecikmis_m, "Tutar_num"].sum())
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
+    c2.metric("Bugün Vadesi Dolan", f"{tb_sum:,.2f} USD", f"{int(vadesi_bugun_m.sum())} Fatura")
+    c3.metric("Geciken Ödemeler", f"{gec_sum:,.2f} USD", f"{int(gecikmis_m.sum())} Fatura")
+
+    for col in ["Proforma No", "Vade (gün)", "Ödendi", "Ülke", "Satış Temsilcisi", "Ödeme Şekli"]:
+        if col not in invoices_df.columns:
+            invoices_df[col] = "" if col != "Ödendi" else False
+    invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
+
+    vade_df = invoices_df[invoices_df["Vade Tarihi"].notna() & (~invoices_df["Ödendi"])].copy()
     gecikmis_df = pd.DataFrame()
     if vade_df.empty:
         st.info("Açık vade kaydı yok.")
@@ -564,6 +1299,62 @@ if menu == "Genel Bakış":
         st.dataframe(gecikmis_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
     else:
         st.info("Gecikmiş ödeme bulunmuyor.")
+    st.markdown("### Satış Analitiği Özeti")
+
+    summary_cols = st.columns(4)
+    summary_cols[0].metric("Toplam Fatura Tutarı", f"{toplam_fatura_tutar:,.2f} USD")
+
+    if date_col and invoices_df[date_col].notna().any():
+        last_30_start = today_norm - pd.Timedelta(days=29)
+        last_30_end = today_norm + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)
+        mask_last_30 = invoices_df[date_col].between(last_30_start, last_30_end, inclusive="both")
+        last_30_total = float(invoices_df.loc[mask_last_30, "Tutar_num"].sum())
+        summary_cols[1].metric("Son 30 Gün Cirosu", f"{last_30_total:,.2f} USD", f"{int(mask_last_30.sum())} Fatura")
+
+        current_year = today_norm.year
+        mask_year = invoices_df[date_col].dt.year == current_year
+        year_total = float(invoices_df.loc[mask_year, "Tutar_num"].sum())
+        summary_cols[2].metric(f"{current_year} Toplamı", f"{year_total:,.2f} USD", f"{int(mask_year.sum())} Fatura")
+    else:
+        summary_cols[1].metric("Son 30 Gün Cirosu", "0.00 USD")
+        summary_cols[2].metric(f"{today_norm.year} Toplamı", "0.00 USD")
+
+    if "Müşteri Adı" in invoices_df.columns:
+        active_customers = (
+            invoices_df["Müşteri Adı"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .replace("", np.nan)
+            .dropna()
+            .nunique()
+        )
+    else:
+        active_customers = 0
+    summary_cols[3].metric("Aktif Müşteri", str(active_customers))
+
+    if invoices_df.empty:
+        st.info("Satış analitiği için fatura kaydı bulunmuyor.")
+    elif "Müşteri Adı" in invoices_df.columns:
+        top_df = invoices_df[invoices_df["Tutar_num"] > 0].copy()
+        top_df["Müşteri Adı"] = top_df["Müşteri Adı"].fillna("Bilinmeyen Müşteri").astype(str).str.strip()
+        top_customers = (
+            top_df.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(5)
+            .reset_index()
+        )
+        if not top_customers.empty:
+            st.markdown("#### En Yüksek Ciroya Sahip İlk 5 Müşteri")
+            display_df = top_customers.copy()
+            display_df["Toplam Ciro"] = display_df["Tutar_num"].map(lambda x: f"{x:,.2f} USD")
+            st.dataframe(display_df[["Müşteri Adı", "Toplam Ciro"]], use_container_width=True)
+        else:
+            st.info("Müşteri bazında ciro hesaplanacak veri bulunamadı.")
+    else:
+        st.info("Satış analitiği için müşteri bilgisi bulunmuyor.")
+
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.info("Daha detaylı işlem yapmak için sol menüden ilgili bölüme geçebilirsiniz.")
@@ -678,11 +1469,19 @@ if menu == "Yeni Cari Kaydı":
             # --- Muhasebeye e-posta (sende tanımlı yardımcılar) ---
             try:
                 yeni_cari_txt_olustur(new_row)
-                send_email_with_txt(
+                attachments = []
+                try:
+                    with open("yeni_cari.txt", "rb") as attachment_file:
+                        attachments.append(("yeni_cari.txt", attachment_file.read(), "text/plain"))
+                except FileNotFoundError:
+                    pass
+
+                send_email(
                     to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
                     subject="Yeni Cari Açılışı",
                     body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
-                    file_path="yeni_cari.txt"
+                    attachments=attachments,
+                    fallback_txt_path="yeni_cari.txt",
                 )
                 st.success("Müşteri eklendi ve e‑posta ile muhasebeye gönderildi!")
             except Exception as e:
@@ -788,6 +1587,83 @@ if menu == "Müşteri Portföyü":
         st.markdown("<div style='color:#b00020; font-weight:bold; font-size:1.1em;'>Kayıt bulunamadı.</div>", unsafe_allow_html=True)
     else:
         st.dataframe(table_df, use_container_width=True)
+
+        st.markdown("#### Toplu Mail Gönderimi")
+    with st.expander("Filtrelenmiş müşterilere toplu mail gönder", expanded=False):
+        email_pattern = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+        mevcut_epostalar = []
+        if "E-posta" in view_df.columns:
+            mevcut_epostalar = [
+                str(e).strip()
+                for e in view_df["E-posta"].dropna().tolist()
+                if str(e).strip()
+            ]
+
+        mevcut_epostalar = sorted({e for e in mevcut_epostalar if email_pattern.match(e)})
+
+        if not mevcut_epostalar:
+            st.info("Seçili filtrelere göre geçerli e-posta adresi bulunamadı.")
+        else:
+            with st.form("bulk_mail_form"):
+                secilen_adresler = st.multiselect(
+                    "Alıcıları seçin", mevcut_epostalar, help="Listelenen geçerli adreslerden seçim yapın."
+                )
+                ek_adresler = st.text_area(
+                    "Ek alıcılar", "", help="Virgül, satır sonu veya noktalı virgülle ayırabilirsiniz."
+                )
+                toplu_konu = st.text_input("Konu")
+                toplu_icerik = st.text_area("İçerik")
+                yuklenen_dosyalar = st.file_uploader(
+                    "Ekler", accept_multiple_files=True, help="E-posta eklerini buradan yükleyin."
+                )
+                gonder = st.form_submit_button("E-postayı Gönder")
+
+            if gonder:
+                tum_adresler = list(secilen_adresler)
+                if ek_adresler.strip():
+                    for parca in re.split(r"[\s,;]+", ek_adresler):
+                        aday = parca.strip()
+                        if aday and email_pattern.match(aday):
+                            tum_adresler.append(aday)
+
+                # Sıra koruyarak tekrarları kaldır
+                benzersiz_adresler = []
+                for adres in tum_adresler:
+                    if adres not in benzersiz_adresler:
+                        benzersiz_adresler.append(adres)
+
+                if not benzersiz_adresler:
+                    st.warning("Lütfen en az bir geçerli alıcı belirtin.")
+                elif not toplu_konu.strip():
+                    st.warning("Konu alanı boş bırakılamaz.")
+                else:
+                    ekler = []
+                    if yuklenen_dosyalar:
+                        for dosya in yuklenen_dosyalar:
+                            try:
+                                icerik = dosya.read()
+                            except Exception:
+                                icerik = dosya.getvalue()
+                            ekler.append(
+                                (
+                                    dosya.name,
+                                    icerik,
+                                    dosya.type or "application/octet-stream",
+                                )
+                            )
+
+                    try:
+                        send_email(
+                            to_email=benzersiz_adresler,
+                            subject=toplu_konu.strip(),
+                            body=toplu_icerik,
+                            attachments=ekler,
+                        )
+                    except Exception as e:
+                        st.error(f"E-posta gönderimi sırasında hata oluştu: {e}")
+                    else:
+                        st.success("E-postalar başarıyla gönderildi.")
+
 
     st.markdown("<h4 style='margin-top: 24px;'>Müşteri Düzenle / Sil</h4>", unsafe_allow_html=True)
 
@@ -902,11 +1778,19 @@ if menu == "Müşteri Portföyü":
 
                 try:
                     yeni_cari_txt_olustur(guncel_bilgiler)
-                    send_email_with_txt(
+                    attachments = []
+                    try:
+                        with open("yeni_cari.txt", "rb") as attachment_file:
+                            attachments.append(("yeni_cari.txt", attachment_file.read(), "text/plain"))
+                    except FileNotFoundError:
+                        pass
+
+                    send_email(
                         to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
                         subject="Güncel Cari Bilgisi",
                         body="Mevcut müşteri için güncel cari bilgileri ekte yer almaktadır.",
-                        file_path="yeni_cari.txt",
+                        attachments=attachments,
+                        fallback_txt_path="yeni_cari.txt",
                     )
                 except Exception as e:
                     st.warning(f"Muhasebeye gönderim sırasında bir hata oluştu: {e}")
@@ -1079,6 +1963,235 @@ if menu == "Etkileşim Günlüğü":
             )
         else:
             st.info("Bu tarihler arasında kayıt yok.")
+
+elif menu == "Özel Gün Tebrikleri":
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Özel Gün Tebrikleri</h2>", unsafe_allow_html=True)
+    st.markdown("Seçilmiş kişilere bayram ve yeni yıl tebrik e-postaları gönderebilirsiniz.")
+    
+    st.markdown(
+        "<h4 style='margin-top:0;'>Seçilmiş kişilere bayram ve yeni yıl tebrikleri gönderin</h4>",
+        unsafe_allow_html=True,
+    )
+
+    musteriden_eposta = extract_unique_emails(df_musteri.get("E-posta")) if "E-posta" in df_musteri.columns else []
+    fuardan_eposta = extract_unique_emails(df_fuar_musteri.get("E-mail")) if "E-mail" in df_fuar_musteri.columns else []
+
+    unknown_country_label = "(Belirtilmedi)"
+
+    email_country_map = {}
+
+    def kayitlardan_ulke_ekle(df, email_col, country_col):
+        if df is None or df.empty or email_col not in df.columns:
+            return
+        country_available = country_col in df.columns
+        for _, row in df.iterrows():
+            raw_email = row.get(email_col, "")
+            if pd.isna(raw_email) or str(raw_email).strip() == "":
+                continue
+            parsed_emails = extract_unique_emails(pd.Series([raw_email]))
+            country_val = str(row.get(country_col, "") if country_available else "").strip()
+            if not country_val or country_val.lower() in ["nan", "none"]:
+                country_val = unknown_country_label
+            for mail in parsed_emails:
+                email_country_map.setdefault(mail, set()).add(country_val)
+
+    kayitlardan_ulke_ekle(df_musteri, "E-posta", "Ülke")
+    kayitlardan_ulke_ekle(df_fuar_musteri, "E-mail", "Ülke")
+
+    tum_epostalar = sorted(email_country_map.keys(), key=lambda x: x.lower())
+    tum_ulkeler = sorted({ulke for ulkeler in email_country_map.values() for ulke in ulkeler})
+
+    if not tum_epostalar:
+        st.info("Gönderim yapabileceğiniz e-posta adresi bulunamadı.")
+        tum_ulkeler = []
+    else:
+        st.caption(f"Toplam benzersiz e-posta: {len(tum_epostalar)}")
+
+    st.session_state.setdefault("bulk_mail_subject", "")
+    st.session_state.setdefault("bulk_mail_body", "")
+    st.session_state.setdefault("bulk_mail_template_info", None)
+    st.session_state.setdefault("holiday_selected_template", "(Şablon seçiniz)")
+    st.session_state.setdefault("holiday_selected_language", None)
+
+    secili_ulkeler = st.multiselect(
+        "Ülke filtresi",
+        tum_ulkeler,
+        default=tum_ulkeler,
+        help="Sadece seçilen ülkelerle ilişkili e-posta adresleri listelenir.",
+    ) if tum_ulkeler else []
+
+    secili_ulkeler_kumesi = set(secili_ulkeler) if secili_ulkeler else set(tum_ulkeler)
+
+    filtrelenmis_epostalar = [
+        mail
+        for mail, ulkeler in email_country_map.items()
+        if not secili_ulkeler_kumesi or ulkeler.intersection(secili_ulkeler_kumesi)
+    ]
+    filtrelenmis_epostalar = sorted(filtrelenmis_epostalar, key=lambda x: x.lower())
+
+    tumunu_sec_opsiyonu = "(Tümünü seç)"
+    multiselect_options = ([tumunu_sec_opsiyonu] + filtrelenmis_epostalar) if filtrelenmis_epostalar else []
+    varsayilan_secim = [tumunu_sec_opsiyonu] if filtrelenmis_epostalar else []
+
+    secilen_epostalar_raw = st.multiselect(
+        "E-posta adresleri",
+        multiselect_options,
+        default=varsayilan_secim,
+        help="Gönderim yapılacak adresleri seçin.",
+    ) if multiselect_options else []
+
+    if tumunu_sec_opsiyonu in secilen_epostalar_raw:
+        secilen_epostalar = filtrelenmis_epostalar
+    else:
+        secilen_epostalar = secilen_epostalar_raw
+
+    derived_languages = sorted({
+        COUNTRY_LANGUAGE_MAP.get(country)
+        for country in secili_ulkeler_kumesi
+        if country != unknown_country_label and COUNTRY_LANGUAGE_MAP.get(country)
+    })
+
+    template_placeholder = "(Şablon seçiniz)"
+    template_options = [template_placeholder] + list(HOLIDAY_MAIL_TEMPLATES.keys())
+    if st.session_state["holiday_selected_template"] not in template_options:
+        st.session_state["holiday_selected_template"] = template_placeholder
+
+    secilen_sablon = st.selectbox(
+        "Şablon",
+        template_options,
+        key="holiday_selected_template",
+    )        
+
+
+    secilen_dil = None
+    fallback_kullanildi = False
+    if secilen_sablon != template_placeholder:
+        sablon_dilleri = sorted(HOLIDAY_MAIL_TEMPLATES.get(secilen_sablon, {}).keys())
+        aday_diller = [lang for lang in sablon_dilleri if lang in derived_languages]
+        if not aday_diller:
+            aday_diller = sablon_dilleri
+
+        if len(aday_diller) == 1:
+            secilen_dil = aday_diller[0]
+            st.session_state["holiday_selected_language"] = secilen_dil
+            st.caption(
+                f"Seçilen ülkelere göre dil otomatik olarak {LANGUAGE_LABELS.get(secilen_dil, secilen_dil)} olarak belirlendi."
+            )
+        else:
+            onceki_dil = st.session_state.get("holiday_selected_language")
+            varsayilan_dil = None
+            if derived_languages:
+                for dil in derived_languages:
+                    if dil in aday_diller:
+                        varsayilan_dil = dil
+                        break
+            if varsayilan_dil is None:
+                varsayilan_dil = aday_diller[0] if aday_diller else None
+            if onceki_dil not in aday_diller:
+                st.session_state["holiday_selected_language"] = varsayilan_dil
+
+            secilen_dil = st.selectbox(
+                "Dil",
+                aday_diller,
+                format_func=lambda lang: LANGUAGE_LABELS.get(lang, lang.upper()),
+                key="holiday_selected_language",                      
+            
+            )
+            
+        mevcut_info = st.session_state.get("bulk_mail_template_info")
+        onceki_konu = st.session_state.get("bulk_mail_subject", "")
+        onceki_govde = st.session_state.get("bulk_mail_body", "")
+        mevcut_sablon_adi = mevcut_info["name"] if mevcut_info else None
+        mevcut_sablon_dili = mevcut_info["language"] if mevcut_info else None
+        alanlar_bos = not onceki_konu.strip() and not onceki_govde.strip()
+        alanlar_mevcut_sablona_esit = bool(
+            mevcut_info
+            and onceki_konu == mevcut_info.get("subject", "")
+            and onceki_govde == mevcut_info.get("body", "")
+        )
+            
+        yeni_icerik, fallback_kullanildi = get_holiday_template_content(secilen_sablon, secilen_dil)
+        if yeni_icerik:
+            sablon_degisti = (
+                mevcut_sablon_adi != secilen_sablon
+                or mevcut_sablon_dili != secilen_dil
+            )
+            manuel_duzenleme = bool(mevcut_info and not alanlar_mevcut_sablona_esit)
+
+            sablon_yuklenecek = False
+            if alanlar_bos:
+                sablon_yuklenecek = True
+            elif sablon_degisti and not manuel_duzenleme:
+                sablon_yuklenecek = True
+            elif not sablon_degisti and alanlar_mevcut_sablona_esit:
+                sablon_yuklenecek = True
+
+            if sablon_yuklenecek:
+                st.session_state["bulk_mail_subject"] = yeni_icerik["subject"]
+                st.session_state["bulk_mail_body"] = yeni_icerik["body"]
+                st.session_state["bulk_mail_template_info"] = {
+                    "name": secilen_sablon,
+                    "language": secilen_dil,
+                    "subject": yeni_icerik["subject"],
+                    "body": yeni_icerik["body"],
+                    "fallback": fallback_kullanildi,
+                }
+    else:
+        st.session_state["holiday_selected_language"] = None
+
+
+    konu = st.text_input("E-posta Konusu", key="bulk_mail_subject")
+    govde = st.text_area(
+        "HTML Gövde",
+        key="bulk_mail_body",
+        height=280,
+        help="İsterseniz metni Türkçe/İngilizce olarak düzenleyebilirsiniz.",
+    )
+
+    yuklenen_gorsel = st.file_uploader(
+        "Görsel ekleyin (isteğe bağlı)",
+        type=["png", "jpg", "jpeg", "gif", "webp", "svg"],
+        accept_multiple_files=False,
+        help="Tek bir görsel yükleyebilirsiniz. Görsel inline gönderim için saklanacaktır.",
+    )
+
+    if filtrelenmis_epostalar:
+        onizleme_df = pd.DataFrame(
+            [
+                {
+                    "E-posta": mail,
+                    "Ülkeler": ", ".join(sorted(email_country_map.get(mail, {unknown_country_label}))),
+                }
+                for mail in filtrelenmis_epostalar
+            ]
+         )
+        
+        st.dataframe(onizleme_df, use_container_width=True, hide_index=True)
+
+    etkin_ulke_text = "Tüm ülkeler" if not secili_ulkeler else ", ".join(secili_ulkeler)
+    st.markdown(
+        f"<div style='margin-top:12px; font-size:0.95em;'>"
+        f"<strong>Aktif ülke filtresi:</strong> {etiket if (etiket := etkin_ulke_text) else 'Tüm ülkeler'}<br>"
+        f"<strong>Seçilen adres sayısı:</strong> {len(secilen_epostalar)}<br>"
+        "<strong>Not:</strong> Gönderimlerde varsayılan HTML imzası otomatik olarak eklenecektir."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Toplu Maili Gönder", type="primary"):
+        if not secilen_epostalar:
+            st.warning("Lütfen en az bir e-posta adresi seçiniz.")
+        elif not konu.strip():
+            st.warning("Lütfen e-posta konusu giriniz.")
+        else:
+            attachments = [yuklenen_gorsel] if yuklenen_gorsel else []
+            try:
+                with st.spinner("E-postalar gönderiliyor..."):
+                    send_fair_bulk_email(secilen_epostalar, konu.strip(), govde, attachments=attachments)
+                st.success(f"E-posta {len(secilen_epostalar)} alıcıya başarıyla gönderildi.")
+            except Exception as exc:
+                st.error(f"Gönderim sırasında bir hata oluştu: {exc}")
+       
 
 
 ### ===========================
@@ -1630,11 +2743,15 @@ elif menu == "Sipariş Operasyonları":
     siparisler = siparisler.sort_values(["Termin Tarihi Order","Tarih"], ascending=[True, True])
 
     # ---- Görünüm için format
+    siparis_sayisi = len(siparisler)
     g = siparisler.copy()
     g["Tarih"] = g["Tarih"].dt.strftime("%d/%m/%Y")
     g["Termin Tarihi"] = pd.to_datetime(g["Termin Tarihi"], errors="coerce").dt.strftime("%d/%m/%Y")
 
-    st.markdown("<h4 style='color:#219A41; font-weight:bold;'>Tüm Siparişe Dönüşenler</h4>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h4 style='color:#219A41; font-weight:bold;'>Tüm Siparişe Dönüşenler ({siparis_sayisi} Adet)</h4>",
+        unsafe_allow_html=True,
+    )
     goruntulenecek_kolonlar = [
         "Tarih",
         "Müşteri Adı",
@@ -2458,6 +3575,150 @@ if menu == "Fuar Kayıtları":
 
             fuar_df = df_fuar_musteri[df_fuar_musteri["Fuar Adı"] == fuar_adi].copy()
 
+            with st.expander("Toplu E-posta Gönderimi", expanded=False):
+                email_list = extract_unique_emails(fuar_df.get("E-mail"))
+                if not email_list:
+                    st.info("Bu fuara ait kayıtlı e-posta adresi bulunamadı.")
+                else:
+                    multiselect_options = ["Tümünü seç"] + email_list
+                    selected_options = st.multiselect(
+                        "E-posta Adresleri",
+                        multiselect_options,
+                        key=f"bulk_mail_recipients_{fuar_adi}"
+                    )
+                    
+                    attachments_key = f"bulk_mail_files_{fuar_adi}"
+                    attachments = st.session_state.get(attachments_key)
+
+                    image_previews = []
+                    inline_cid_map = {}
+                    if attachments:
+                        image_cid_state = st.session_state.setdefault("bulk_mail_image_cids", {})
+                        for uploaded_file in attachments:
+                            if uploaded_file is None:
+                                continue
+                            mime_type = uploaded_file.type or ""
+                            if not mime_type.startswith("image/"):
+                                continue
+                            try:
+                                file_bytes = uploaded_file.getvalue()
+                            except Exception as exc:
+                                st.error(f"{uploaded_file.name} okunurken hata oluştu: {exc}")
+                                continue
+                            attachment_key = f"{uploaded_file.name}:{len(file_bytes)}"
+                            cid = image_cid_state.get(attachment_key)
+                            if not cid:
+                                cid = make_msgid()
+                                image_cid_state[attachment_key] = cid
+                            image_previews.append((uploaded_file.name, cid, attachment_key))
+                            inline_cid_map[attachment_key] = cid
+
+                    if image_previews:
+                        st.markdown("**HTML gövdesine eklenecek görseller:**")
+                        for file_name, cid, _ in image_previews:
+                            cid_value = cid.strip("<>")
+                            
+                            st.code(
+                                f'<img src="cid:{cid_value}" alt="{file_name}">',
+                                language="html"
+                            )                            
+                 
+                    if "Tümünü seç" in selected_options:
+                        selected_recipients = email_list
+                    else:
+                        selected_recipients = selected_options
+
+                   
+                    
+                    available_countries = sorted({
+                        str(country).strip()
+                        for country in fuar_df.get("Ülke", [])
+                        if str(country).strip()
+                    })
+                    country_options = ["— Ülke Seçiniz —"] + available_countries
+                    selected_country = st.selectbox(
+                        "Ülke Seçiniz",
+                        country_options,
+                        key=f"bulk_mail_country_{fuar_adi}"
+                    )
+                    selected_country = (
+                        "" if selected_country == "— Ülke Seçiniz —" else selected_country
+                    )
+
+                    subject_key = f"bulk_mail_subject_{fuar_adi}"
+                    body_key = f"bulk_mail_body_{fuar_adi}"
+                    template_key = f"{subject_key}_last_template"
+                    language_key = f"{subject_key}_language"
+
+                    st.session_state.setdefault(subject_key, "")
+                    st.session_state.setdefault(body_key, "")
+
+                    prev_language = st.session_state.get(language_key)
+                    last_template = st.session_state.get(template_key)
+
+                    language = COUNTRY_LANGUAGE_MAP.get(selected_country) if selected_country else None
+                    template = FAIR_MAIL_TEMPLATES.get(language) if language else None
+
+                    if prev_language != language and template:
+                        last_template_subject = ""
+                        last_template_body = ""
+                        if isinstance(last_template, tuple) and len(last_template) == 3:
+                            last_template_subject = last_template[1] or ""
+                            last_template_body = last_template[2] or ""
+
+                        current_subject = st.session_state.get(subject_key, "")
+                        current_body = st.session_state.get(body_key, "")
+
+                        if (not current_subject) or (current_subject == last_template_subject):
+                            st.session_state[subject_key] = template.get("subject", "")
+
+                        if (not current_body) or (current_body == last_template_body):
+                            st.session_state[body_key] = template.get("body", "")
+
+                        st.session_state[template_key] = (
+                            language,
+                            template.get("subject", ""),
+                            template.get("body", ""),
+                        )
+
+                    if prev_language != language:
+                        st.session_state[language_key] = language
+
+                    subject = st.text_input("Konu", key=subject_key)
+                    body = st.text_area("E-posta İçeriği", key=body_key)
+
+                    st.file_uploader(
+                        "Ek Dosyalar",
+                        accept_multiple_files=True,
+                        key=attachments_key,
+                    )
+
+                    attachments = st.session_state.get(attachments_key)
+                    
+                    if st.button("Gönder", key=f"bulk_mail_send_{fuar_adi}"):
+                        if not selected_recipients:
+                            st.warning("Lütfen en az bir e-posta adresi seçin.")
+                        elif not subject.strip():
+                            st.warning("Lütfen e-posta konusu girin.")
+                        elif not body.strip():
+                            st.warning("Lütfen e-posta içeriği girin.")
+                        else:
+                            
+                            try:
+                                send_fair_bulk_email(
+                                    selected_recipients,
+                                    subject.strip(),
+                                    body,
+                                    attachments or [],
+                                    embed_images=EMBED_IMAGES,
+                                    inline_cid_map=inline_cid_map
+                                )
+                        
+                                st.success("E-postalar başarıyla gönderildi.")
+                            except Exception as exc:
+                                st.error(f"E-posta gönderilirken hata oluştu: {exc}")
+            
+
             # Hızlı filtreler
             col_fa, col_fb, col_fc = st.columns([1, 1, 1])
             with col_fa:
@@ -2469,11 +3730,15 @@ if menu == "Fuar Kayıtları":
 
             # Tip dönüşümleri ve filtre uygula
             fuar_df["Görüşme Kalitesi"] = pd.to_numeric(fuar_df["Görüşme Kalitesi"], errors="coerce")
-            fuar_df["Tarih"] = pd.to_datetime(fuar_df["Tarih"], errors="coerce")
+            fuar_df["Tarih"] = pd.to_datetime(fuar_df["Tarih"], errors="coerce").dt.normalize()
+
+            tarih_bas_ts = pd.Timestamp(tarih_bas).normalize()
+            tarih_bit_ts = pd.Timestamp(tarih_bit).normalize()
+
             mask = (
                 (fuar_df["Görüşme Kalitesi"].fillna(0) >= min_puan) &
-                (fuar_df["Tarih"].dt.date >= tarih_bas) &
-                (fuar_df["Tarih"].dt.date <= tarih_bit)
+                (fuar_df["Tarih"] >= tarih_bas_ts) &
+                (fuar_df["Tarih"] <= tarih_bit_ts)
             )
             fuar_df = fuar_df[mask].copy().sort_values("Tarih", ascending=False)
 
@@ -2622,15 +3887,193 @@ elif menu == "Satış Analitiği":
     end_ts   = pd.to_datetime(d2) + pd.Timedelta(days=1) - pd.Timedelta(milliseconds=1)  # gün sonu
 
     mask = df_evrak[date_col].between(start_ts, end_ts, inclusive="both")
-    df_range = df_evrak[mask]
+    df_range = df_evrak[mask].copy()
 
     aralik_toplam = float(df_range["Tutar_num"].sum())
     st.markdown(
         f"<div style='font-size:1.2em; color:#f7971e; font-weight:bold;'>{d1} - {d2} Arası Toplam: {aralik_toplam:,.2f} USD</div>",
         unsafe_allow_html=True,
     )
-    
+
+    # ---- Müşteri filtresi ----
+    df_analytics = df_range.copy()
+    customer_col = "Müşteri Adı" if "Müşteri Adı" in df_analytics.columns else None
+
+    selected_segment = None
+    segment_label = "Müşteri Segmenti"
+    if customer_col and "Kategori" in df_musteri.columns and not df_musteri.empty:
+        segment_df = df_musteri[["Müşteri Adı", "Kategori"]].dropna(subset=["Müşteri Adı"]).copy()
+        if not segment_df.empty:
+            segment_df["Müşteri Adı"] = segment_df["Müşteri Adı"].astype(str).str.strip()
+            segment_series = (
+                segment_df.drop_duplicates("Müşteri Adı").set_index("Müşteri Adı")["Kategori"]
+            )
+            if not segment_series.empty:
+                df_analytics[segment_label] = (
+                    df_analytics[customer_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .map(segment_series)
+                    .fillna("Belirtilmemiş")
+                )
+                segment_options = (
+                    ["Tüm Segmentler"]
+                    + sorted(
+                        df_analytics[segment_label]
+                        .dropna()
+                        .astype(str)
+                        .str.strip()
+                        .unique()
+                        .tolist(),
+                        key=lambda x: x.lower(),
+                    )
+                )
+                if len(segment_options) > 1:
+                    selected_segment = st.selectbox("Müşteri Segmenti", segment_options)
+                    if selected_segment != "Tüm Segmentler":
+                        df_analytics = df_analytics[df_analytics[segment_label] == selected_segment]
+
+    df_filtered = df_analytics.copy()
+    selected_customer = None
+    if customer_col:
+        musteri_listesi = sorted(
+            df_analytics[customer_col]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", np.nan)
+            .dropna()
+            .unique()
+        )
+        musteri_opsiyonlari = ["Tüm Müşteriler"] + musteri_listesi
+        selected_customer = st.selectbox("Müşteri Bazında Filtre", musteri_opsiyonlari)
+        if selected_customer != "Tüm Müşteriler":
+            df_filtered = df_filtered[
+                df_filtered[customer_col].fillna("").astype(str).str.strip() == selected_customer
+            ]
+
+    filtered_total = float(df_filtered["Tutar_num"].sum())
+    segment_text = (
+        f"{selected_segment} Segmenti - "
+        if selected_segment and selected_segment != "Tüm Segmentler"
+        else ""
+    )
+    if customer_col and selected_customer and selected_customer != "Tüm Müşteriler":
+        toplam_baslik = f"{segment_text}{selected_customer} Toplam"
+    elif customer_col:
+        toplam_baslik = f"{segment_text}Tüm Müşteriler Toplam"
+    else:
+        toplam_baslik = f"{segment_text}Seçili Aralık Toplam"
+
+    st.markdown(
+        f"<div style='font-size:1.1em; color:#185a9d; font-weight:bold;'>{toplam_baslik}: {filtered_total:,.2f} USD</div>",
+        unsafe_allow_html=True,
+    )
+        # ---- En yüksek ciroya sahip müşteriler ----
+    # ---- En yüksek ciroya sahip müşteriler ----
+    if "Müşteri Adı" in df_analytics.columns and not df_analytics.empty:
+        df_musteri = df_analytics.copy()
+        df_musteri["Müşteri Adı"] = df_musteri["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
+        top_musteriler = (
+            df_musteri.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(5)
+            .reset_index()
+        )
+        top_musteriler.rename(columns={"Tutar_num": "Toplam Ciro"}, inplace=True)
+
+        st.markdown(
+            "<h3 style='margin-top:20px; color:#185a9d;'>En Yüksek Ciroya Sahip İlk 5 Müşteri</h3>",
+            unsafe_allow_html=True,
+        )
+
+        col_tab, col_chart = st.columns([1, 1])
+        with col_tab:
+            display_df = top_musteriler.copy()
+            display_df["Toplam Ciro"] = display_df["Toplam Ciro"].map(lambda x: f"{x:,.2f} USD")
+            st.dataframe(display_df, use_container_width=True)
+        with col_chart:
+            st.bar_chart(top_musteriler.set_index("Müşteri Adı")["Toplam Ciro"], use_container_width=True)
+    else:
+        st.info("Seçilen tarih aralığında müşteri bazlı ciro bilgisi bulunamadı.")
+
+    if "Müşteri Adı" in df_analytics.columns and not df_analytics.empty:
+        st.markdown(
+            "<h3 style='margin-top:20px; color:#185a9d;'>Müşteri Bazında Ciro Yüzdeleri</h3>",
+            unsafe_allow_html=True,
+        )
+
+        pie_df = df_analytics.copy()
+        pie_df["Müşteri Adı"] = pie_df["Müşteri Adı"].fillna("Bilinmeyen Müşteri")
+        pie_summary = (
+            pie_df.groupby("Müşteri Adı")["Tutar_num"]
+            .sum()
+            .reset_index()
+            .sort_values("Tutar_num", ascending=False)
+        )
+
+        if not pie_summary.empty:
+            total_value = float(pie_summary["Tutar_num"].sum())
+
+
+            if total_value <= 0:
+                st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
+            else:
+                pie_summary["Yüzde"] = pie_summary["Tutar_num"].apply(
+                    lambda value: round((float(value) / total_value) * 100, 1) if total_value else 0.0
+                )
+
+                colors = plt.cm.tab20(np.linspace(0, 1, len(pie_summary)))
+                fig, ax = plt.subplots(figsize=(8, 6))
+                wedges, _, autotexts = ax.pie(
+                    pie_summary["Tutar_num"],
+                    autopct=lambda pct: f"%{pct:.1f}" if pct > 0 else "",
+                    startangle=0,
+                    colors=colors,
+                    textprops={"color": "white", "weight": "bold"},
+                )
+                for autotext in autotexts:
+                    autotext.set_fontsize(10)
+
+                legend_labels = [
+                    f"{label} (%{pct:.1f})" for label, pct in zip(pie_summary["Müşteri Adı"], pie_summary["Yüzde"])
+                ]
+
+                ax.legend(
+                    wedges,
+                    legend_labels,
+                    title="Müşteriler",
+                    loc="center left",
+                    bbox_to_anchor=(1, 0.5),
+                    fontsize=10,
+                    title_fontsize=11,
+                )
+                ax.set_title("Müşteri Bazında Ciro Dağılımı", color="#185a9d", fontsize=14)
+                ax.axis("equal")
+
+                st.pyplot(fig, use_container_width=True)
+                plt.close(fig)
+
+                display_pie = pie_summary.copy()
+                display_pie["Tutar (USD)"] = display_pie["Tutar_num"].map(lambda x: f"{float(x):,.2f}")
+                display_pie["Yüzde (%)"] = display_pie["Yüzde"].map(lambda x: f"%{x:.1f}")
+                display_pie = display_pie[["Müşteri Adı", "Tutar (USD)", "Yüzde (%)"]]
+                st.dataframe(display_pie, use_container_width=True)
+        else:
+            st.info("Müşteri bazında ciro yüzdesi hesaplanamadı.")
+
     # ---- Detay tablo ----
-    show_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
-    show_cols = [c for c in show_cols if c in df_range.columns]
-    st.dataframe(df_range[show_cols].sort_values(by=date_col, ascending=False), use_container_width=True)
+    detail_cols = ["Müşteri Adı", "Fatura No", date_col, "Tutar"]
+    detail_cols = [c for c in detail_cols if c in df_filtered.columns]
+
+    if df_filtered.empty:
+        st.info("Seçilen kriterlere uygun satış kaydı bulunamadı.")
+    else:
+        detail_df = df_filtered.copy()
+        if date_col in detail_df.columns:
+            detail_df = detail_df.sort_values(by=date_col, ascending=False)
+        if detail_cols:
+            detail_df = detail_df[detail_cols]
+        st.dataframe(detail_df, use_container_width=True)
