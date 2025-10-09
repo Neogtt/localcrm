@@ -1283,8 +1283,33 @@ if menu == "Genel Bakış":
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
         teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"].copy()
-        if not teslim_edilenler.empty:
-            teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5).copy()
+        if not teslim_edilenler.empty:    
+            if "Tarih" in teslim_edilenler.columns:
+                teslim_edilenler["Tarih"] = pd.to_datetime(
+                    teslim_edilenler["Tarih"], errors="coerce"
+                )
+
+            subset_cols = [
+                col for col in ["Proforma No", "Müşteri Adı", "Tarih"]
+                if col in teslim_edilenler.columns
+            ]
+            sort_col = None
+            if "Tarih" in teslim_edilenler.columns:
+                sort_col = "Tarih"
+            elif subset_cols:
+                sort_col = subset_cols[0]
+
+            if sort_col is not None:
+                teslim_edilenler = teslim_edilenler.sort_values(
+                    by=sort_col, ascending=False, na_position="last"
+                )
+
+            if subset_cols:
+                teslim_edilenler = teslim_edilenler.drop_duplicates(
+                    subset=subset_cols, keep="first"
+                )
+
+            teslim_edilenler = teslim_edilenler.head(5).copy()
 
             for tarih_kolon in ["Tarih", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi"]:
                 if tarih_kolon not in teslim_edilenler.columns:
@@ -1304,7 +1329,8 @@ if menu == "Genel Bakış":
             )
 
             teslim_edilenler["Gün Farkı"] = (
-                teslim_edilenler["Sevk Tarihi"] - teslim_edilenler["Proforma Tarihi"]
+                teslim_edilenler["Sevk Tarihi"]
+                - teslim_edilenler["Proforma Tarihi"]
             ).dt.days
             
             for kolon in [
@@ -1320,36 +1346,34 @@ if menu == "Genel Bakış":
                     .replace({"NaT": ""})
                 )
 
+             if "Tarih" in teslim_edilenler.columns:
+                teslim_edilenler["Tarih"] = (
+                    teslim_edilenler["Proforma Tarihi"]
+                    if "Proforma Tarihi" in teslim_edilenler.columns
+                    else teslim_edilenler["Tarih"].fillna("")
+                )
+
+            display_columns = [
+                "Müşteri Adı",
+                "Ülke",
+                "Proforma No",
+                "Proforma Tarihi",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
+                "Gün Farkı",
+                "Tutar",
+                "Açıklama",
+            ]
+            if "Tarih" in teslim_edilenler.columns and "Tarih" not in display_columns:
+                display_columns.insert(3, "Tarih")
+
+            mevcut_kolonlar = [
+                kolon for kolon in display_columns if kolon in teslim_edilenler.columns
+            ]
+
             st.dataframe(
-                teslim_edilenler[
-                    [
-                        "Müşteri Adı",
-                        "Ülke",
-                        "Proforma No",
-                        "Proforma Tarihi",
-                        "Termin Tarihi",
-                        "Sevk Tarihi",
-                        "Ulaşma Tarihi",
-                        "Gün Farkı",                        
-                        "Tutar",
-                        "Açıklama",
-                    ]
-                ],
-                use_container_width=True,
-            )
-            teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5)
-            st.dataframe(
-                teslim_edilenler[
-                    [
-                        "Müşteri Adı",
-                        "Ülke",
-                        "Proforma No",
-                        "Tarih",
-                        "Gün Farkı",
-                        "Tutar",
-                        "Açıklama",
-                    ]
-                ],
+                teslim_edilenler[mevcut_kolonlar],
                 use_container_width=True,
             )
         else:
