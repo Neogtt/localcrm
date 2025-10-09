@@ -1178,26 +1178,50 @@ if menu == "Genel Bakış":
         sevk_bekleyenler["Termin Tarihi"] = pd.to_datetime(
             sevk_bekleyenler["Termin Tarihi"], errors="coerce"
         )
+        sevk_bekleyenler["Proforma Tarihi"] = pd.to_datetime(
+            sevk_bekleyenler["Tarih"], errors="coerce"
+        )        
         sevk_bekleyenler = sevk_bekleyenler.sort_values(
             by="Termin Tarihi", ascending=True, na_position="last"
         )
-        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].dt.strftime("%d/%m/%Y")
-        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].fillna("")
+
+        display_df = sevk_bekleyenler.copy()
+        display_df["Kalan Gün"] = (
+            display_df["Termin Tarihi"] - today_norm
+        ).dt.days
+        display_df["Sipariş Üzerinden Geçen Gün"] = (
+            display_df["Termin Tarihi"] - display_df["Proforma Tarihi"]
+        ).dt.days
+
+        for tarih_kolon in ["Termin Tarihi", "Proforma Tarihi"]:
+            display_df[tarih_kolon] = (
+                display_df[tarih_kolon]
+                .dt.strftime("%d/%m/%Y")
+                .fillna("")
+                .replace({"NaT": ""})
+            )
+
+        for gun_kolon in ["Kalan Gün", "Sipariş Üzerinden Geçen Gün"]:
+            display_df[gun_kolon] = display_df[gun_kolon].apply(
+                lambda x: "" if pd.isna(x) else int(x)
+            )        
+
         st.dataframe(
-            sevk_bekleyenler[
+            display_df[
                 [
                     "Müşteri Adı",
                     "Ülke",
                     "Proforma No",
-                    "Tarih",
+                    "Proforma Tarihi",
                     "Termin Tarihi",
+                    "Kalan Gün",
+                    "Sipariş Üzerinden Geçen Gün",                    
                     "Tutar",
-                    "Vade (gün)",
                     "Açıklama",
                 ]
             ],
             use_container_width=True,
-        )       
+        )
 
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
