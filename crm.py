@@ -1268,6 +1268,10 @@ if menu == "Genel Bakış":
                 teslim_edilenler["Ulaşma Tarihi"], errors="coerce"
             )
 
+            teslim_edilenler["Gün Farkı"] = (
+                teslim_edilenler["Sevk Tarihi"] - teslim_edilenler["Proforma Tarihi"]
+            ).dt.days
+            
             for kolon in [
                 "Proforma Tarihi",
                 "Termin Tarihi",
@@ -1291,15 +1295,28 @@ if menu == "Genel Bakış":
                         "Termin Tarihi",
                         "Sevk Tarihi",
                         "Ulaşma Tarihi",
+                        "Gün Farkı",                        
                         "Tutar",
-                        "Vade (gün)",
                         "Açıklama",
                     ]
                 ],
                 use_container_width=True,
-            )            
+            )
             teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5)
-            st.dataframe(teslim_edilenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+            st.dataframe(
+                teslim_edilenler[
+                    [
+                        "Müşteri Adı",
+                        "Ülke",
+                        "Proforma No",
+                        "Tarih",
+                        "Gün Farkı",
+                        "Tutar",
+                        "Açıklama",
+                    ]
+                ],
+                use_container_width=True,
+            )
         else:
             st.info("Teslim edilmiş sipariş yok.")
     else:
@@ -3545,7 +3562,7 @@ elif menu == "ETA İzleme":
             ulasanlar["Proforma Tarihi"] = pd.NaT            
         ulasanlar["Ulaşma Tarihi"] = pd.to_datetime(ulasanlar["Ulaşma Tarihi"], errors="coerce")
 
-        ulasanlar["Gün Farkı"] = (ulasanlar["Ulaşma Tarihi"] - ulasanlar["Proforma Tarihi"]).dt.days
+        ulasanlar["Gün Farkı"] = (ulasanlar["Sevk Tarihi"] - ulasanlar["Proforma Tarihi"]).dt.days
         ulasanlar["Proforma Tarihi"] = ulasanlar["Proforma Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Sevk Tarihi"] = ulasanlar["Sevk Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Termin Tarihi"] = ulasanlar["Termin Tarihi"].dt.strftime("%d/%m/%Y")
