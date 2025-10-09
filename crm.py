@@ -16,6 +16,7 @@ EMBED_IMAGES = True
 
 CURRENCY_SYMBOLS = ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]
 
+ETA_COLUMNS = ["Müşteri Adı", "Proforma No", "Sevk Tarihi", "ETA Tarihi", "Açıklama"]
 
 def smart_to_num(value):
     if pd.isna(value):
@@ -546,7 +547,11 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
         try:
             df_eta = pd.read_excel(path, sheet_name="ETA")
         except Exception:
-            df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+            for col in ETA_COLUMNS:
+                if col not in df_eta.columns:
+                    df_eta[col] = ""
+            extra_cols = [col for col in df_eta.columns if col not in ETA_COLUMNS]
+            df_eta = df_eta.reindex(columns=ETA_COLUMNS + extra_cols, fill_value="")            
         try:
             df_fuar_musteri = pd.read_excel(path, sheet_name="FuarMusteri")
         except Exception:
@@ -570,7 +575,7 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
             "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
             "Yük Resimleri", "EK Belgeler"
         ])
-        df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+        df_eta = pd.DataFrame(columns=ETA_COLUMNS)        
         df_fuar_musteri = pd.DataFrame(columns=[
             "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
         ])
@@ -2864,17 +2869,20 @@ elif menu == "Sipariş Operasyonları":
         # Proforma'dan bilgiler
         row = df_proforma.loc[df_proforma["ID"] == sec_id_sevk].iloc[0]
         # ETA kolon güvenliği
-        for col in ["Müşteri Adı","Proforma No","ETA Tarihi","Açıklama"]:
+        for col in ETA_COLUMNS:        
             if col not in df_eta.columns:
                 df_eta[col] = ""
         # ETA'ya ekle (varsa güncelleme)
         filt = (df_eta["Müşteri Adı"] == row["Müşteri Adı"]) & (df_eta["Proforma No"] == row["Proforma No"])
         if filt.any():
+            df_eta.loc[filt, "Sevk Tarihi"] = row.get("Sevk Tarihi", "")           
             df_eta.loc[filt, "Açıklama"] = row.get("Açıklama","")
         else:
+            sevk_tarih = row.get("Sevk Tarihi", "")            
             df_eta = pd.concat([df_eta, pd.DataFrame([{
                 "Müşteri Adı": row["Müşteri Adı"],
                 "Proforma No": row["Proforma No"],
+                "Sevk Tarihi": sevk_tarih,               
                 "ETA Tarihi": "",
                 "Açıklama": row.get("Açıklama","")
             }])], ignore_index=True)
@@ -3192,10 +3200,12 @@ elif menu == "ETA İzleme":
     for col in ["Sevk Durumu", "Proforma No", "Sevk Tarihi", "Ulaşma Tarihi"]:
         if col not in df_proforma.columns:
             df_proforma[col] = ""
-
-    for col in ["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"]:
+            
+    for col in ETA_COLUMNS:            
         if col not in df_eta.columns:
             df_eta[col] = ""
+    extra_eta_cols = [col for col in df_eta.columns if col not in ETA_COLUMNS]
+    df_eta = df_eta.reindex(columns=ETA_COLUMNS + extra_eta_cols, fill_value="")            
 
     # ---- Yardımcılar ----
     def safe_name(text, maxlen=120):
@@ -3234,8 +3244,9 @@ elif menu == "ETA İzleme":
         """
         Klasör adı için kullanılacak tarihi belirler:
         1) Proforma 'Sevk Tarihi' varsa o,
-        2) yoksa ilgili ETA kaydındaki 'ETA Tarihi',
-        3) o da yoksa bugün.
+        2) yoksa ETA kaydındaki 'Sevk Tarihi',
+        3) yoksa ilgili ETA kaydındaki 'ETA Tarihi',
+        4) o da yoksa bugün.
         """
         # Sevk Tarihi
         pr_mask = (df_proforma["Müşteri Adı"] == musteri) & (df_proforma["Proforma No"] == proforma_no)
@@ -3251,8 +3262,21 @@ elif menu == "ETA İzleme":
             except Exception:
                 pass
 
-        # ETA Tarihi
+        # ETA Sevk Tarihi
         eta_mask = (df_eta["Müşteri Adı"] == musteri) & (df_eta["Proforma No"] == proforma_no)
+        eta_sevk_ts = None
+        if eta_mask.any():
+            try:
+                eta_sevk_ts = pd.to_datetime(df_eta.loc[eta_mask, "Sevk Tarihi"].values[0], errors="coerce")
+            except Exception:
+                eta_sevk_ts = None
+        if pd.notnull(eta_sevk_ts):
+            try:
+                return eta_sevk_ts.date()
+            except Exception:
+                pass
+
+        # ETA Tarihi        
         eta_ts = None
         if eta_mask.any():
             try:
@@ -3402,16 +3426,36 @@ elif menu == "ETA İzleme":
         filtre = (df_eta["Müşteri Adı"] == sec_musteri) & (df_eta["Proforma No"] == sec_proforma)
         if filtre.any():
             mevcut_eta = df_eta.loc[filtre, "ETA Tarihi"].values[0]
-            mevcut_aciklama = df_eta.loc[filtre, "Açıklama"].values[0]
+            mevcut_aciklama = df_eta.loc[filtre, "Açıklama"].values[0],
+            mevcut_sevk = df_eta.loc[filtre, "Sevk Tarihi"].values[0]            
         else:
             mevcut_eta = ""
             mevcut_aciklama = ""
+            mevcut_sevk = ""
+        proforma_mask = (df_proforma["Müşteri Adı"] == sec_musteri) & (df_proforma["Proforma No"] == sec_proforma)
+        mevcut_proforma_sevk = df_proforma.loc[proforma_mask, "Sevk Tarihi"].values[0] if proforma_mask.any() else ""
+
+        def _safe_date(value):
+            if value is None:
+                return None
+            if isinstance(value, str) and not value.strip():
+                return None
+            try:
+                ts = pd.to_datetime(value, errors="coerce")
+                
+            except Exception:
+                return None
+            if pd.isna(ts):
+                return None
+            try:
+                return ts.date()
+            except Exception:
+                return None
 
         with st.form("edit_eta"):
-            try:
-                varsayilan_eta = pd.to_datetime(mevcut_eta).date() if mevcut_eta and pd.notnull(mevcut_eta) and str(mevcut_eta) != "NaT" else datetime.date.today()
-            except Exception:
-                varsayilan_eta = datetime.date.today()
+            varsayilan_eta = _safe_date(mevcut_eta) or datetime.date.today()
+            varsayilan_sevk = _safe_date(mevcut_sevk) or _safe_date(mevcut_proforma_sevk) or datetime.date.today()
+            sevk_tarih = st.date_input("Sevk Tarihi", value=varsayilan_sevk)          
             eta_tarih = st.date_input("ETA Tarihi", value=varsayilan_eta)
             aciklama = st.text_area("Açıklama", value=mevcut_aciklama)
             guncelle = st.form_submit_button("ETA'yı Kaydet/Güncelle")
@@ -3420,16 +3464,20 @@ elif menu == "ETA İzleme":
 
             if guncelle:
                 if filtre.any():
+                    df_eta.loc[filtre, "Sevk Tarihi"] = sevk_tarih                    
                     df_eta.loc[filtre, "ETA Tarihi"] = eta_tarih
                     df_eta.loc[filtre, "Açıklama"] = aciklama
                 else:
                     new_row = {
                         "Müşteri Adı": sec_musteri,
                         "Proforma No": sec_proforma,
+                        "Sevk Tarihi": sevk_tarih,                        
                         "ETA Tarihi": eta_tarih,
                         "Açıklama": aciklama
                     }
                     df_eta = pd.concat([df_eta, pd.DataFrame([new_row])], ignore_index=True)
+                if proforma_mask.any():
+                    df_proforma.loc[proforma_mask, "Sevk Tarihi"] = sevk_tarih                 
                 update_excel()
                 st.success("ETA kaydedildi/güncellendi!")
                 st.rerun()
@@ -3457,15 +3505,21 @@ elif menu == "ETA İzleme":
 
     # ==== ETA TAKİP LİSTESİ ====
     st.markdown("#### ETA Takip Listesi")
-    for col in ["Proforma No", "ETA Tarihi"]:
+    for col in ["Proforma No", "Sevk Tarihi", "ETA Tarihi"]:
         if col not in df_eta.columns:
             df_eta[col] = ""
     if not df_eta.empty:
-        df_eta["ETA Tarihi"] = pd.to_datetime(df_eta["ETA Tarihi"], errors="coerce")
+        df_eta_display = df_eta.copy()
+        df_eta_display["ETA Tarihi"] = pd.to_datetime(df_eta_display["ETA Tarihi"], errors="coerce")
+        df_eta_display["Sevk Tarihi"] = pd.to_datetime(df_eta_display["Sevk Tarihi"], errors="coerce")
         today = pd.to_datetime(datetime.date.today())
-        df_eta["Kalan Gün"] = (df_eta["ETA Tarihi"] - today).dt.days
-        tablo = df_eta[["Müşteri Adı", "Proforma No", "ETA Tarihi", "Kalan Gün", "Açıklama"]].copy()
-        tablo = tablo.sort_values(["ETA Tarihi", "Müşteri Adı", "Proforma No"], ascending=[True, True, True])
+        df_eta_display["Kalan Gün"] = (df_eta_display["ETA Tarihi"] - today).dt.days
+        df_eta_display = df_eta_display.sort_values(["ETA Tarihi", "Müşteri Adı", "Proforma No"], ascending=[True, True, True])
+        tablo = df_eta_display[["Müşteri Adı", "Proforma No", "Sevk Tarihi", "ETA Tarihi", "Kalan Gün", "Açıklama"]].copy()
+        tablo["ETA Tarihi"] = tablo["ETA Tarihi"].dt.strftime("%d/%m/%Y")
+        tablo["Sevk Tarihi"] = tablo["Sevk Tarihi"].dt.strftime("%d/%m/%Y")
+        tablo["ETA Tarihi"] = tablo["ETA Tarihi"].fillna("").replace({"NaT": ""})
+        tablo["Sevk Tarihi"] = tablo["Sevk Tarihi"].fillna("").replace({"NaT": ""})
         st.dataframe(tablo, use_container_width=True)
 
         st.markdown("##### ETA Kaydı Sil")
@@ -3528,15 +3582,18 @@ elif menu == "ETA İzleme":
             # ETA ekle/güncelle
             filtre_eta = (df_eta["Müşteri Adı"] == musteri) & (df_eta["Proforma No"] == pno)
             eta_deger = pd.to_datetime(yeni_eta) if yeni_eta else ""
+            sevk_kaydi = df_proforma.at[idx[0], "Sevk Tarihi"] if len(idx) > 0 and "Sevk Tarihi" in df_proforma.columns else ""            
             if filtre_eta.any():
                 if yeni_eta:
                     df_eta.loc[filtre_eta, "ETA Tarihi"] = eta_deger
                 if aciklama_geri:
                     df_eta.loc[filtre_eta, "Açıklama"] = aciklama_geri
+                df_eta.loc[filtre_eta, "Sevk Tarihi"] = sevk_kaydi                    
             else:
                 yeni_satir = {
                     "Müşteri Adı": musteri,
                     "Proforma No": pno,
+                    "Sevk Tarihi": sevk_kaydi,                    
                     "ETA Tarihi": eta_deger if yeni_eta else "",
                     "Açıklama": aciklama_geri,
                 }
