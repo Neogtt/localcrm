@@ -3539,14 +3539,19 @@ elif menu == "ETA İzleme":
             ulasanlar["Termin Tarihi"] = pd.to_datetime(ulasanlar["Termin Tarihi"], errors="coerce")
         else:
             ulasanlar["Termin Tarihi"] = pd.NaT
+        if "Tarih" in ulasanlar.columns:
+            ulasanlar["Proforma Tarihi"] = pd.to_datetime(ulasanlar["Tarih"], errors="coerce")
+        else:
+            ulasanlar["Proforma Tarihi"] = pd.NaT            
         ulasanlar["Ulaşma Tarihi"] = pd.to_datetime(ulasanlar["Ulaşma Tarihi"], errors="coerce")
 
-        ulasanlar["Gün Farkı"] = (ulasanlar["Ulaşma Tarihi"] - ulasanlar["Termin Tarihi"]).dt.days
+        ulasanlar["Gün Farkı"] = (ulasanlar["Ulaşma Tarihi"] - ulasanlar["Proforma Tarihi"]).dt.days
+        ulasanlar["Proforma Tarihi"] = ulasanlar["Proforma Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Sevk Tarihi"] = ulasanlar["Sevk Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Termin Tarihi"] = ulasanlar["Termin Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Ulaşma Tarihi"] = ulasanlar["Ulaşma Tarihi"].dt.strftime("%d/%m/%Y")
-
-        tablo = ulasanlar[["Müşteri Adı", "Proforma No", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi", "Gün Farkı", "Tutar", "Açıklama"]]
+        
+        tablo = ulasanlar[["Müşteri Adı", "Proforma No", "Proforma Tarihi", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi", "Gün Farkı", "Tutar", "Açıklama"]]
         st.dataframe(tablo, use_container_width=True)
     else:
         st.info("Henüz ulaşan sipariş yok.")
