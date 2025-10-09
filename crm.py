@@ -1251,6 +1251,12 @@ if menu == "Genel Bakış":
             eta_display["ETA Tarihi"] = pd.NaT
 
         eta_display["ETA Tarihi"] = pd.to_datetime(eta_display["ETA Tarihi"], errors="coerce")
+        eta_display["Kalan Gün"] = (
+            eta_display["ETA Tarihi"] - today_norm
+        ).dt.days
+        eta_display["Kalan Gün"] = eta_display["Kalan Gün"].apply(
+            lambda x: "" if pd.isna(x) else int(x)
+        )        
         eta_display = eta_display.sort_values(
             by="ETA Tarihi",
             ascending=True,
@@ -1268,11 +1274,11 @@ if menu == "Genel Bakış":
                 "Tarih",
                 "ETA Tarihi",
                 "Tutar",
-                "Vade (gün)",
+                "Kalan Gün",
                 "Açıklama",
             ]],
             use_container_width=True,
-        )      
+        )
     # ---- Son Teslim Edilen Siparişler ----
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
