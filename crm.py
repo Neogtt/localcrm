@@ -1186,7 +1186,7 @@ if menu == "Genel Bakış":
         )
 
         display_df = sevk_bekleyenler.copy()
-        display_df["Kalan Gün"] = (
+        display_df["Termin - Bugün Farkı (Gün)"] = (
             display_df["Termin Tarihi"] - today_norm
         ).dt.days
         display_df["Sipariş Üzerinden Geçen Gün"] = (
@@ -1201,10 +1201,10 @@ if menu == "Genel Bakış":
                 .replace({"NaT": ""})
             )
 
-        for gun_kolon in ["Kalan Gün", "Sipariş Üzerinden Geçen Gün"]:
+        for gun_kolon in ["Termin - Bugün Farkı (Gün)", "Sipariş Üzerinden Geçen Gün"]:
             display_df[gun_kolon] = display_df[gun_kolon].apply(
                 lambda x: "" if pd.isna(x) else int(x)
-            )        
+            )
 
         st.dataframe(
             display_df[
@@ -1214,8 +1214,8 @@ if menu == "Genel Bakış":
                     "Proforma No",
                     "Proforma Tarihi",
                     "Termin Tarihi",
-                    "Kalan Gün",
-                    "Sipariş Üzerinden Geçen Gün",                    
+                    "Termin - Bugün Farkı (Gün)",
+                    "Sipariş Üzerinden Geçen Gün",                   
                     "Tutar",
                     "Açıklama",
                 ]
