@@ -3510,9 +3510,15 @@ elif menu == "ETA İzleme":
             df_eta[col] = ""
     if not df_eta.empty:
         df_eta_display = df_eta.copy()
-        df_eta_display["ETA Tarihi"] = pd.to_datetime(df_eta_display["ETA Tarihi"], errors="coerce")
-        df_eta_display["Sevk Tarihi"] = pd.to_datetime(df_eta_display["Sevk Tarihi"], errors="coerce")
-        today = pd.to_datetime(datetime.date.today())
+        df_eta_display["ETA Tarihi"] = pd.to_datetime(
+            df_eta_display["ETA Tarihi"], errors="coerce", dayfirst=True
+        )
+        df_eta_display["Sevk Tarihi"] = pd.to_datetime(
+            df_eta_display["Sevk Tarihi"], errors="coerce", dayfirst=True
+        )
+        df_eta_display["ETA Tarihi"] = df_eta_display["ETA Tarihi"].dt.normalize()
+        df_eta_display["Sevk Tarihi"] = df_eta_display["Sevk Tarihi"].dt.normalize()
+        today = pd.Timestamp.today().normalize()
         df_eta_display["Kalan Gün"] = (df_eta_display["ETA Tarihi"] - today).dt.days
         df_eta_display = df_eta_display.sort_values(["ETA Tarihi", "Müşteri Adı", "Proforma No"], ascending=[True, True, True])
         tablo = df_eta_display[["Müşteri Adı", "Proforma No", "Sevk Tarihi", "ETA Tarihi", "Kalan Gün", "Açıklama"]].copy()
