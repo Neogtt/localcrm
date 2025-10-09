@@ -1247,8 +1247,57 @@ if menu == "Genel Bakış":
     # ---- Son Teslim Edilen Siparişler ----
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
-        teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"]
+        teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"].copy()
         if not teslim_edilenler.empty:
+            teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5).copy()
+
+            for tarih_kolon in ["Tarih", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi"]:
+                if tarih_kolon not in teslim_edilenler.columns:
+                    teslim_edilenler[tarih_kolon] = pd.NaT
+
+            teslim_edilenler["Proforma Tarihi"] = pd.to_datetime(
+                teslim_edilenler["Tarih"], errors="coerce"
+            )
+            teslim_edilenler["Termin Tarihi"] = pd.to_datetime(
+                teslim_edilenler["Termin Tarihi"], errors="coerce"
+            )
+            teslim_edilenler["Sevk Tarihi"] = pd.to_datetime(
+                teslim_edilenler["Sevk Tarihi"], errors="coerce"
+            )
+            teslim_edilenler["Ulaşma Tarihi"] = pd.to_datetime(
+                teslim_edilenler["Ulaşma Tarihi"], errors="coerce"
+            )
+
+            for kolon in [
+                "Proforma Tarihi",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
+            ]:
+                teslim_edilenler[kolon] = (
+                    teslim_edilenler[kolon]
+                    .dt.strftime("%d/%m/%Y")
+                    .fillna("")
+                    .replace({"NaT": ""})
+                )
+
+            st.dataframe(
+                teslim_edilenler[
+                    [
+                        "Müşteri Adı",
+                        "Ülke",
+                        "Proforma No",
+                        "Proforma Tarihi",
+                        "Termin Tarihi",
+                        "Sevk Tarihi",
+                        "Ulaşma Tarihi",
+                        "Tutar",
+                        "Vade (gün)",
+                        "Açıklama",
+                    ]
+                ],
+                use_container_width=True,
+            )            
             teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5)
             st.dataframe(teslim_edilenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
         else:
