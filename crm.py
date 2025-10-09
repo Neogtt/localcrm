@@ -3202,13 +3202,20 @@ elif menu == "ETA İzleme":
         # Default: bugün
         return datetime.date.today()
 
-    def get_loading_photos_folder(musteri_adi: str, tarih: datetime.date) -> str:
+    def get_loading_photos_folder(musteri_adi: str, proforma_no: str, fallback_date: datetime.date) -> str:
         """
-        Ana klasör altında <Müşteri_Adi>_<YYYY-MM-DD> / Yükleme Resimleri hiyerarşisini hazırlar ve döndürür.
+        Ana klasör altında <Müşteri_Adi>_<Proforma_No> / Yükleme Resimleri hiyerarşisini hazırlar ve döndürür.
+        Proforma numarası yoksa tarih tabanlı bir isimlendirmeye geri döner.
         """
         if not ROOT_EXPORT_FOLDER_ID:
             return ""
-        folder_name = f"{safe_name(musteri_adi)}_{tarih.strftime('%Y-%m-%d')}"
+  
+        musteri_parca = safe_name(musteri_adi)
+        proforma_parca = safe_name(proforma_no)
+        if not proforma_parca:
+            proforma_parca = fallback_date.strftime('%Y-%m-%d')
+
+        folder_name = f"{musteri_parca}_{proforma_parca}" if musteri_parca else proforma_parca
         parent = get_or_create_folder_by_name(folder_name, ROOT_EXPORT_FOLDER_ID)
         if not parent:
             return ""
@@ -3228,13 +3235,18 @@ elif menu == "ETA İzleme":
         sec_musteri = selected_row["Müşteri Adı"]
         sec_proforma = selected_row["Proforma No"]
 
-        # === Klasör tarihi (Sevk/ETA/bugün) + Müşteri adı ===
+        # === Klasör bilgisi (Sevk/ETA/bugün) + Müşteri adı ===
         klasor_tarih = resolve_folder_date(sec_musteri, sec_proforma)
+        proforma_gosterim = ""
+        if pd.notna(sec_proforma):
+            proforma_gosterim = str(sec_proforma).strip()
+        if not proforma_gosterim:
+            proforma_gosterim = klasor_tarih.strftime('%Y-%m-%d')
+            
+        # ========== YÜKLEME FOTOĞRAFLARI (Müşteri_Adi + Proforma → “Yükleme Resimleri”) ==========
+        st.markdown("#### Yükleme Fotoğrafları (Müşteri + Proforma bazlı)")
 
-        # ========== YÜKLEME FOTOĞRAFLARI (Müşteri_Adi + Tarih → “Yükleme Resimleri”) ==========
-        st.markdown("#### Yükleme Fotoğrafları (Müşteri + Tarih bazlı)")
-
-        hedef_klasor = get_loading_photos_folder(sec_musteri, klasor_tarih)
+        hedef_klasor = get_loading_photos_folder(sec_musteri, sec_proforma, klasor_tarih)
         if not hedef_klasor:
             st.error("Klasör hiyerarşisi oluşturulamadı.")
         else:
@@ -3243,7 +3255,7 @@ elif menu == "ETA İzleme":
             st.markdown(f"[Klasörü yeni sekmede aç]({drive_link})")
 
             # 2) Panel içinde gömülü görüntüleme – sadece gezinme
-            with st.expander(f"Panelde klasörü görüntüle – {sec_musteri} / {klasor_tarih.strftime('%Y-%m-%d')}"):
+            with st.expander(f"Panelde klasörü görüntüle – {sec_musteri} / {proforma_gosterim}"):
                 embed = f"https://drive.google.com/embeddedfolderview?id={hedef_klasor}#grid"
                 st.markdown(
                     f'<iframe src="{embed}" width="100%" height="520" frameborder="0" '
@@ -3273,7 +3285,7 @@ elif menu == "ETA İzleme":
                     "Yüklenecek dosyaları seçin",
                     type=["pdf", "jpg", "jpeg", "png", "webp"],
                     accept_multiple_files=True,
-                    key=f"yuk_resimleri_dedupe_{sec_musteri}_{klasor_tarih}"
+                    key=f"yuk_resimleri_dedupe_{safe_name(sec_musteri)}_{safe_name(proforma_gosterim)}"
                 )
 
                 if files:
