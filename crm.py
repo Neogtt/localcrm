@@ -1283,55 +1283,60 @@ if menu == "Genel Bakış":
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
         teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"].copy()
-        if not teslim_edilenler.empty:    
-            if "Tarih" in teslim_edilenler.columns:
-                teslim_edilenler["Tarih"] = pd.to_datetime(
-                    teslim_edilenler["Tarih"], errors="coerce"
-                )
+        if not teslim_edilenler.empty:
+            # Ana kolonları normalize et
+            for text_col in ["Proforma No", "Müşteri Adı", "Ülke"]:
+                if text_col in teslim_edilenler.columns:
+                    teslim_edilenler[text_col] = (
+                        teslim_edilenler[text_col]
+                        .astype(str)
+                        .str.strip()
+                    )
 
-            subset_cols = [
-                col for col in ["Proforma No", "Müşteri Adı", "Tarih"]
-                if col in teslim_edilenler.columns
+            # Tarih kolonlarını datetime'a çevir
+            date_cols = [
+                "Proforma Tarihi",
+                "Tarih",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
             ]
-            sort_col = None
-            if "Tarih" in teslim_edilenler.columns:
-                sort_col = "Tarih"
-            elif subset_cols:
-                sort_col = subset_cols[0]
+            for tarih_kolon in date_cols:
+                if tarih_kolon in teslim_edilenler.columns:
+                    teslim_edilenler[tarih_kolon] = pd.to_datetime(
+                        teslim_edilenler[tarih_kolon], errors="coerce"
+                    )
+
+            if "Proforma Tarihi" not in teslim_edilenler.columns and "Tarih" in teslim_edilenler.columns:
+                teslim_edilenler["Proforma Tarihi"] = teslim_edilenler["Tarih"]
+
+            # Son teslim edilenleri sıralayıp tekrarlayan proformaları ele
+            sort_candidates = ["Ulaşma Tarihi", "Sevk Tarihi", "Proforma Tarihi"]
+            sort_col = next(
+                (col for col in sort_candidates if col in teslim_edilenler.columns),
+                None,
+            )
 
             if sort_col is not None:
                 teslim_edilenler = teslim_edilenler.sort_values(
                     by=sort_col, ascending=False, na_position="last"
                 )
 
-            if subset_cols:
+            if "Proforma No" in teslim_edilenler.columns:
                 teslim_edilenler = teslim_edilenler.drop_duplicates(
-                    subset=subset_cols, keep="first"
+                    subset=["Proforma No"], keep="first"
                 )
 
-            teslim_edilenler = teslim_edilenler.head(5).copy()
+            teslim_edilenler = teslim_edilenler.head(5).reset_index(drop=True)
 
-            for tarih_kolon in ["Tarih", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi"]:
-                if tarih_kolon not in teslim_edilenler.columns:
-                    teslim_edilenler[tarih_kolon] = pd.NaT
-
-            teslim_edilenler["Proforma Tarihi"] = pd.to_datetime(
-                teslim_edilenler["Tarih"], errors="coerce"
-            )
-            teslim_edilenler["Termin Tarihi"] = pd.to_datetime(
-                teslim_edilenler["Termin Tarihi"], errors="coerce"
-            )
-            teslim_edilenler["Sevk Tarihi"] = pd.to_datetime(
-                teslim_edilenler["Sevk Tarihi"], errors="coerce"
-            )
-            teslim_edilenler["Ulaşma Tarihi"] = pd.to_datetime(
-                teslim_edilenler["Ulaşma Tarihi"], errors="coerce"
-            )
-
-            teslim_edilenler["Gün Farkı"] = (
-                teslim_edilenler["Sevk Tarihi"]
-                - teslim_edilenler["Proforma Tarihi"]
-            ).dt.days
+            if {
+                "Sevk Tarihi",
+                "Proforma Tarihi",
+            }.issubset(teslim_edilenler.columns):
+                teslim_edilenler["Gün Farkı"] = (
+                    teslim_edilenler["Sevk Tarihi"]
+                    - teslim_edilenler["Proforma Tarihi"]
+                ).dt.days
             
             for kolon in [
                 "Proforma Tarihi",
@@ -1339,18 +1344,16 @@ if menu == "Genel Bakış":
                 "Sevk Tarihi",
                 "Ulaşma Tarihi",
             ]:
-                teslim_edilenler[kolon] = (
-                    teslim_edilenler[kolon]
-                    .dt.strftime("%d/%m/%Y")
-                    .fillna("")
-                    .replace({"NaT": ""})
-                )
-
-            if "Tarih" in teslim_edilenler.columns:
-                teslim_edilenler["Tarih"] = (
-                    teslim_edilenler["Proforma Tarihi"]
-                    if "Proforma Tarihi" in teslim_edilenler.columns
-                    else teslim_edilenler["Tarih"].fillna("")
+                if kolon in teslim_edilenler.columns:
+                    teslim_edilenler[kolon] = (
+                        teslim_edilenler[kolon]
+                        .dt.strftime("%d/%m/%Y")
+                        .fillna("")
+                        .replace({"NaT": ""})
+                    )
+            if "Gün Farkı" in teslim_edilenler.columns:
+                teslim_edilenler["Gün Farkı"] = teslim_edilenler["Gün Farkı"].apply(
+                    lambda x: "" if pd.isna(x) else int(x)
                 )
 
             display_columns = [
@@ -1365,8 +1368,6 @@ if menu == "Genel Bakış":
                 "Tutar",
                 "Açıklama",
             ]
-            if "Tarih" in teslim_edilenler.columns and "Tarih" not in display_columns:
-                display_columns.insert(3, "Tarih")
 
             mevcut_kolonlar = [
                 kolon for kolon in display_columns if kolon in teslim_edilenler.columns
