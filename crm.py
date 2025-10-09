@@ -1346,7 +1346,7 @@ if menu == "Genel Bakış":
                     .replace({"NaT": ""})
                 )
 
-             if "Tarih" in teslim_edilenler.columns:
+            if "Tarih" in teslim_edilenler.columns:
                 teslim_edilenler["Tarih"] = (
                     teslim_edilenler["Proforma Tarihi"]
                     if "Proforma Tarihi" in teslim_edilenler.columns
