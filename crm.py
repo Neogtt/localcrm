@@ -1038,6 +1038,7 @@ menuler = [
 # 2) Tüm kullanıcılar için aynı menüler
 USER_MENU_PERMISSIONS = {
     "Muhammed": {"ETA İzleme"},
+    "Muhammed": {"ETA İzleme", "Fatura işlemleri"},    
 }
 
 
