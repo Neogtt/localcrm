@@ -3004,18 +3004,156 @@ elif menu == "Fatura işlemleri":
         df_evrak.loc[bos_id_mask, "ID"] = [str(uuid.uuid4()) for _ in range(bos_id_mask.sum())]
         update_excel()
 
+        # ---- Otomatik seçim için session state anahtarları ----
+    musteri_key = "invoice_customer_select"
+    proforma_key = "invoice_proforma_select"
+    pending_select_key = "pending_invoice_select"
+    st.session_state.setdefault(musteri_key, "")
+    st.session_state.setdefault(proforma_key, "")
+    st.session_state.setdefault("invoice_last_customer", "")
+    st.session_state.setdefault(pending_select_key, "")
+
+    if "Sevk Durumu" not in df_proforma.columns:
+        df_proforma["Sevk Durumu"] = ""
+    if "Durum" not in df_proforma.columns:
+        df_proforma["Durum"] = ""
+
+    # ---- Sevk edilmiş fakat faturası kesilmemiş siparişler ----
+    st.markdown("### Faturası Kesilmemiş Sevkli Siparişler")
+    sevkedilen_mask = df_proforma["Sevk Durumu"] == "Sevkedildi"
+    if "Durum" in df_proforma.columns:
+        sevkedilen_mask &= df_proforma["Durum"].astype(str).str.strip().eq("Siparişe Dönüştü")
+    pending_orders = df_proforma[sevkedilen_mask].copy()
+
+    if not pending_orders.empty:
+        pending_orders["Termin Tarihi Sıra"] = pd.to_datetime(
+            pending_orders.get("Termin Tarihi"), errors="coerce"
+        )
+        pending_orders["Tarih Sıra"] = pd.to_datetime(
+            pending_orders.get("Tarih"), errors="coerce"
+        )
+        pending_orders = pending_orders.sort_values(
+            ["Termin Tarihi Sıra", "Tarih Sıra"], ascending=[True, True]
+        )
+
+    if not pending_orders.empty:
+        pending_orders["ID"] = pending_orders["ID"].astype(str)
+        pending_orders["Müşteri Adı"] = pending_orders["Müşteri Adı"].astype(str)
+        pending_orders["Proforma No"] = pending_orders["Proforma No"].astype(str)
+
+        pending_orders = pending_orders[
+            pending_orders["ID"].str.strip() != ""
+        ]
+
+        if not df_evrak.empty:
+            invoice_pairs = set(
+                (
+                    str(m).strip().lower(),
+                    str(p).strip().lower(),
+                )
+                for m, p in zip(df_evrak.get("Müşteri Adı", []), df_evrak.get("Proforma No", []))
+                if str(m).strip() or str(p).strip()
+            )
+            pending_orders = pending_orders[
+                ~pending_orders.apply(
+                    lambda r: (
+                        str(r.get("Müşteri Adı", "")).strip().lower(),
+                        str(r.get("Proforma No", "")).strip().lower(),
+                    )
+                    in invoice_pairs,
+                    axis=1,
+                )
+            ]
+
+        pending_orders = pending_orders[
+            pending_orders["Proforma No"].astype(str).str.strip() != ""
+        ]
+
+    if pending_orders.empty:
+        st.info("Sevk edilip henüz faturası kaydedilmemiş sipariş bulunmuyor.")
+    else:
+        display_cols = [
+            "ID",
+            "Müşteri Adı",
+            "Proforma No",
+            "Termin Tarihi",
+            "Tutar",
+            "Açıklama",
+        ]
+        for col in display_cols:
+            if col not in pending_orders.columns:
+                pending_orders[col] = ""
+        table = pending_orders[display_cols].copy()
+        table["Termin Tarihi"] = pd.to_datetime(table["Termin Tarihi"], errors="coerce").dt.strftime("%d/%m/%Y")
+        table["Tutar"] = table["Tutar"].apply(lambda x: f"{smart_to_num(x):,.2f} USD" if str(x).strip() else "")
+        st.dataframe(table.drop(columns=["ID"]), use_container_width=True)
+
+        option_labels = {"": "— Sipariş Seç —"}
+        for _, row in pending_orders.iterrows():
+            label = f"{row['Müşteri Adı']} - {row['Proforma No']}"
+            termin_dt = pd.to_datetime(row.get("Termin Tarihi", ""), errors="coerce")
+            if pd.notnull(termin_dt):
+                label += f" | Termin: {termin_dt.strftime('%d/%m/%Y')}"
+            tutar_raw = row.get("Tutar", "")
+            if str(tutar_raw).strip():
+                label += f" | Tutar: {smart_to_num(tutar_raw):,.2f} USD"
+            option_labels[row["ID"]] = label
+
+        pending_options = [""] + pending_orders["ID"].tolist()
+        if st.session_state[pending_select_key] not in pending_options:
+            st.session_state[pending_select_key] = ""
+
+        selected_pending = st.selectbox(
+            "Fatura kaydı açmak istediğiniz siparişi seçin",
+            options=pending_options,
+            key=pending_select_key,
+            format_func=lambda oid: option_labels.get(oid, "— Sipariş Seç —"),
+        )
+
+        if st.button("Seçimi Fatura Formuna Aktar", disabled=(selected_pending == "")):
+            row = pending_orders[pending_orders["ID"] == selected_pending]
+            if not row.empty:
+                hedef = row.iloc[0]
+                st.session_state[musteri_key] = str(hedef.get("Müşteri Adı", ""))
+                st.session_state[proforma_key] = str(hedef.get("Proforma No", ""))
+                st.session_state[pending_select_key] = ""
+                st.rerun()
+
     # ---- Müşteri / Proforma seçimleri ----
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
-    secilen_musteri = st.selectbox("Müşteri Seç", [""] + musteri_secenek)
+    musteri_options = [""] + musteri_secenek
+    if st.session_state[musteri_key] not in musteri_options:
+        st.session_state[musteri_key] = ""
+    secilen_musteri = st.selectbox("Müşteri Seç", musteri_options, key=musteri_key)
+
+    if st.session_state.get("invoice_last_customer") != secilen_musteri:
+        st.session_state["invoice_last_customer"] = secilen_musteri
+        st.session_state[proforma_key] = ""
 
     if secilen_musteri:
-        p_list = df_proforma.loc[df_proforma["Müşteri Adı"] == secilen_musteri, "Proforma No"].dropna().astype(str).unique().tolist()
-        proforma_no_sec = st.selectbox("Proforma No Seç", [""] + sorted(p_list))
+        p_list = (
+            df_proforma.loc[
+                df_proforma["Müşteri Adı"].astype(str) == secilen_musteri,
+                "Proforma No",
+            ]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+        proforma_options = [""] + sorted(p_list)
     else:
-        proforma_no_sec = ""
+        proforma_options = [""]
+
+    if st.session_state[proforma_key] not in proforma_options:
+        st.session_state[proforma_key] = ""
+
+    proforma_no_sec = st.selectbox("Proforma No Seç", proforma_options, key=proforma_key)
 
     # ---- Müşteri varsayılanları (ülke/temsilci/ödeme) ----
-    musteri_info = df_musteri[df_musteri["Müşteri Adı"] == secilen_musteri]
+    musteri_info = df_musteri[
+        df_musteri["Müşteri Adı"].astype(str) == secilen_musteri
+    ]
     ulke = musteri_info["Ülke"].values[0] if not musteri_info.empty else ""
     temsilci = musteri_info["Satış Temsilcisi"].values[0] if not musteri_info.empty else ""
     odeme = musteri_info["Ödeme Şekli"].values[0] if not musteri_info.empty else ""
@@ -3023,12 +3161,18 @@ elif menu == "Fatura işlemleri":
     # ---- Proforma'dan Vade (gün) çek ve Vade Tarihi hesapla ----
     vade_gun = ""
     if secilen_musteri and proforma_no_sec:
-        pr = df_proforma[(df_proforma["Müşteri Adı"] == secilen_musteri) & (df_proforma["Proforma No"] == proforma_no_sec)]
+        pr = df_proforma[
+            (df_proforma["Müşteri Adı"].astype(str) == secilen_musteri)
+            & (df_proforma["Proforma No"].astype(str) == proforma_no_sec)
+        ]
         if not pr.empty:
             vade_gun = pr.iloc[0].get("Vade (gün)", "")
 
     # ---- Eski evrak linkleri (aynı müşteri+proforma altında son satır) ----
-    onceki_evrak = df_evrak[(df_evrak["Müşteri Adı"] == secilen_musteri) & (df_evrak["Proforma No"] == proforma_no_sec)].tail(1)
+    onceki_evrak = df_evrak[
+        (df_evrak["Müşteri Adı"].astype(str) == secilen_musteri)
+        & (df_evrak["Proforma No"].astype(str) == proforma_no_sec)
+    ].tail(1)
 
     def file_link_html(label, url):
         return f'<div style="margin-top:-6px;"><a href="{url}" target="_blank" style="color:#219A41;">[Daha önce yüklenmiş {label}]</a></div>' if url else \
@@ -3106,9 +3250,9 @@ elif menu == "Fatura işlemleri":
 
         # 2) Tekilleştirme: aynı (Müşteri, Proforma, Fatura No) varsa GÜNCELLE; yoksa EKLE
         key_mask = (
-            (df_evrak["Müşteri Adı"] == secilen_musteri) &
-            (df_evrak["Proforma No"] == proforma_no_sec) &
-            (df_evrak["Fatura No"] == fatura_no)
+            (df_evrak["Müşteri Adı"].astype(str) == secilen_musteri) &
+            (df_evrak["Proforma No"].astype(str) == proforma_no_sec) &
+            (df_evrak["Fatura No"].astype(str) == fatura_no)
         )
 
         # Vade Tarihi yazımı
