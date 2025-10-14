@@ -58,6 +58,7 @@ USERS = {
     "export1": "Seker12345!",
     "admin": "Seker12345!",
     "Boss": "Seker12345!",
+    "Muhammed": "Seker12345!",
 }
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -1035,7 +1036,22 @@ menuler = [
 ]
 
 # 2) Tüm kullanıcılar için aynı menüler
-allowed_menus = menuler
+USER_MENU_PERMISSIONS = {
+    "Muhammed": {"ETA İzleme"},
+}
+
+
+def resolve_allowed_menus(username):
+    allowed_names = USER_MENU_PERMISSIONS.get(username)
+    if not allowed_names:
+        return menuler
+
+    filtered = [item for item in menuler if item[0] in allowed_names]
+    return filtered if filtered else menuler
+
+
+# 2) Kullanıcıya göre menüleri sınırla
+allowed_menus = resolve_allowed_menus(st.session_state.user)
 
 # 3) Etiketler ve haritalar
 labels = [f"{ikon} {isim}" for (isim, ikon) in allowed_menus]
@@ -1102,6 +1118,10 @@ st.sidebar.radio(
 
 # 8) Kullanım: seçili menü adı
 menu = st.session_state.menu_state
+allowed_menu_names = {isim for (isim, _ikon) in allowed_menus}
+if menu not in allowed_menu_names:
+    menu = allowed_menus[0][0]
+    st.session_state.menu_state = menu
 
 
 # Sidebar: manuel senkron
