@@ -3008,10 +3008,12 @@ elif menu == "Fatura işlemleri":
     musteri_key = "invoice_customer_select"
     proforma_key = "invoice_proforma_select"
     pending_select_key = "pending_invoice_select"
+    pending_reset_flag_key = "pending_invoice_select_reset"
     st.session_state.setdefault(musteri_key, "")
     st.session_state.setdefault(proforma_key, "")
     st.session_state.setdefault("invoice_last_customer", "")
     st.session_state.setdefault(pending_select_key, "")
+    st.session_state.setdefault(pending_reset_flag_key, False)
 
     if "Sevk Durumu" not in df_proforma.columns:
         df_proforma["Sevk Durumu"] = ""
@@ -3100,6 +3102,10 @@ elif menu == "Fatura işlemleri":
             option_labels[row["ID"]] = label
 
         pending_options = [""] + pending_orders["ID"].tolist()
+        if st.session_state.get(pending_reset_flag_key):
+            st.session_state[pending_select_key] = ""
+            st.session_state[pending_reset_flag_key] = False
+
         if st.session_state[pending_select_key] not in pending_options:
             st.session_state[pending_select_key] = ""
 
@@ -3116,8 +3122,78 @@ elif menu == "Fatura işlemleri":
                 hedef = row.iloc[0]
                 st.session_state[musteri_key] = str(hedef.get("Müşteri Adı", ""))
                 st.session_state[proforma_key] = str(hedef.get("Proforma No", ""))
-                st.session_state[pending_select_key] = ""
+                st.session_state[pending_reset_flag_key] = True
                 st.rerun()
+
+    st.markdown("### Kayıtlı Fatura Tarihlerini Güncelle")
+
+    invoice_mask = df_evrak["Fatura No"].astype(str).str.strip() != ""
+    existing_invoices = df_evrak[invoice_mask].copy()
+
+    if existing_invoices.empty:
+        st.info("Güncellenebilecek kayıtlı fatura bulunmuyor.")
+    else:
+        def _safe_date(value, fallback=None):
+            if isinstance(value, datetime.datetime):
+                return value.date()
+            if isinstance(value, datetime.date):
+                return value
+            try:
+                ts = pd.to_datetime(value, errors="coerce")
+            except Exception:
+                ts = pd.NaT
+            if pd.isna(ts):
+                return fallback
+            return ts.date()
+
+        def _format_invoice(idx):
+            row = existing_invoices.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma = str(row.get("Proforma No", "")).strip()
+            invoice_date = _safe_date(row.get("Fatura Tarihi"))
+            due_date = _safe_date(row.get("Vade Tarihi"))
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma:
+                parts.append(f"Proforma: {proforma}")
+            if invoice_date:
+                parts.append(f"Fatura Tarihi: {invoice_date.strftime('%d/%m/%Y')}")
+            if due_date:
+                parts.append(f"Vade Tarihi: {due_date.strftime('%d/%m/%Y')}")
+            return " | ".join(parts)
+
+        invoice_indices = existing_invoices.index.tolist()
+        selected_invoice = st.selectbox(
+            "Güncellemek istediğiniz faturayı seçin",
+            options=invoice_indices,
+            format_func=_format_invoice,
+            key="invoice_edit_select",
+        )
+
+        if invoice_indices:
+            secili_satir = existing_invoices.loc[selected_invoice]
+            default_invoice_date = _safe_date(secili_satir.get("Fatura Tarihi"), fallback=datetime.date.today())
+            default_due_date = _safe_date(secili_satir.get("Vade Tarihi"), fallback=default_invoice_date)
+
+            with st.form("update_invoice_dates"):
+                yeni_fatura_tarihi = st.date_input("Yeni Fatura Tarihi", value=default_invoice_date)
+                yeni_vade_tarihi = st.date_input("Yeni Vade Tarihi", value=default_due_date)
+                update_submitted = st.form_submit_button("Tarihleri Güncelle")
+
+            if update_submitted:
+                df_evrak.at[selected_invoice, "Fatura Tarihi"] = yeni_fatura_tarihi
+                df_evrak.at[selected_invoice, "Vade Tarihi"] = yeni_vade_tarihi
+                try:
+                    gun_farki = (pd.Timestamp(yeni_vade_tarihi) - pd.Timestamp(yeni_fatura_tarihi)).days
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = str(gun_farki)
+                except Exception:
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = ""
+
+                update_excel()
+                st.success("Fatura tarihleri güncellendi!")
+                st.rerun()
+
 
     # ---- Müşteri / Proforma seçimleri ----
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
