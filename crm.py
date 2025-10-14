@@ -1025,7 +1025,7 @@ menuler = [
     ("Teklif Yönetimi", "💰"),
     ("Proforma Yönetimi", "📄"),
     ("Sipariş Operasyonları", "🚚"),
-    ("İhracat Evrakları", "📑"),
+    ("Fatura işlemleri", "📑"),
     ("Tahsilat Planı", "⏰"),
     ("ETA İzleme", "🛳️"),
     ("Fuar Kayıtları", "🎫"),
@@ -2983,9 +2983,9 @@ elif menu == "Sipariş Operasyonları":
 ### --- İHRACAT EVRAKLARI MENÜSÜ ---
 ### ===========================
 
-elif menu == "İhracat Evrakları":
+elif menu == "Fatura işlemleri":
 
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Fatura işlemleri</h2>", unsafe_allow_html=True)
 
     # ---- Sütun güvenliği + benzersiz ID ----
     gerekli_kolonlar = [
