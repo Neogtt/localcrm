@@ -572,7 +572,7 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
         ])
         df_evrak = pd.DataFrame(columns=[
             "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
-            "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+            "Ödenen Tutar", "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
             "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
             "Yük Resimleri", "EK Belgeler"
         ])
@@ -1406,19 +1406,32 @@ if menu == "Genel Bakış":
     # ---- Vade Takibi Tablosu (HERKES GÖRÜR) ----
     st.markdown("### Vadeli Fatura ve Tahsilat Takibi")
 
-    for col in ["Vade Tarihi", "Ödendi"]:
+    for col in ["Vade Tarihi", "Ödendi", "Ödenen Tutar"]:
         if col not in invoices_df.columns:
-            invoices_df[col] = "" if col == "Vade Tarihi" else False
+            if col == "Vade Tarihi":
+                invoices_df[col] = ""
+            elif col == "Ödendi":
+                invoices_df[col] = False
+            else:
+                invoices_df[col] = 0.0
+
+    invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
+    invoices_df["Ödenen Tutar"] = pd.to_numeric(
+        invoices_df["Ödenen Tutar"], errors="coerce"
+    ).fillna(0.0)
+    kalan_serisi = (
+        invoices_df["Tutar_num"].fillna(0.0) - invoices_df["Ödenen Tutar"]
+    ).clip(lower=0.0)
 
     vade_ts = pd.to_datetime(invoices_df["Vade Tarihi"], errors="coerce")
-    od_me = ~invoices_df["Ödendi"].astype(bool)
-    vadesi_gelmemis_m = (vade_ts > today_norm) & od_me
-    vadesi_bugun_m = (vade_ts.dt.date == today_norm.date()) & od_me
-    gecikmis_m = (vade_ts < today_norm) & od_me
+    outstanding_mask = kalan_serisi > 0.01
+    vadesi_gelmemis_m = (vade_ts > today_norm) & outstanding_mask
+    vadesi_bugun_m = (vade_ts.dt.date == today_norm.date()) & outstanding_mask
+    gecikmis_m = (vade_ts < today_norm) & outstanding_mask
 
-    tg_sum = float(invoices_df.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
-    tb_sum = float(invoices_df.loc[vadesi_bugun_m, "Tutar_num"].sum())
-    gec_sum = float(invoices_df.loc[gecikmis_m, "Tutar_num"].sum())
+    tg_sum = float(kalan_serisi.loc[vadesi_gelmemis_m].sum())
+    tb_sum = float(kalan_serisi.loc[vadesi_bugun_m].sum())
+    gec_sum = float(kalan_serisi.loc[gecikmis_m].sum())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
@@ -1430,7 +1443,9 @@ if menu == "Genel Bakış":
             invoices_df[col] = "" if col != "Ödendi" else False
     invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
 
-    vade_df = invoices_df[invoices_df["Vade Tarihi"].notna() & (~invoices_df["Ödendi"])].copy()
+    vade_df = invoices_df[
+        invoices_df["Vade Tarihi"].notna() & outstanding_mask
+    ].copy()
     gecikmis_df = pd.DataFrame()
     if vade_df.empty:
         st.info("Açık vade kaydı yok.")
@@ -1439,11 +1454,23 @@ if menu == "Genel Bakış":
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - pd.to_datetime(datetime.date.today())).dt.days
         vade_df = vade_df.sort_values("Kalan Gün", ascending=True)
         gecikmis_df = vade_df[vade_df["Kalan Gün"] < 0].copy()
-        st.dataframe(vade_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+        vade_df_display = vade_df.copy()
+        vade_df_display["Kalan Bakiye"] = vade_df_display.index.map(kalan_serisi.get)
+        vade_df_display["Kalan Bakiye"] = vade_df_display["Kalan Bakiye"].fillna(0.0).map(lambda x: f"{x:,.2f} USD")
+        st.dataframe(
+            vade_df_display[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün", "Kalan Bakiye"]],
+            use_container_width=True,
+        )
 
     st.markdown("#### Gecikmiş Ödemeler")
     if not gecikmis_df.empty:
-        st.dataframe(gecikmis_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+        gecikmis_display = gecikmis_df.copy()
+        gecikmis_display["Kalan Bakiye"] = gecikmis_display.index.map(kalan_serisi.get)
+        gecikmis_display["Kalan Bakiye"] = gecikmis_display["Kalan Bakiye"].fillna(0.0).map(lambda x: f"{x:,.2f} USD")
+        st.dataframe(
+            gecikmis_display[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün", "Kalan Bakiye"]],
+            use_container_width=True,
+        )
     else:
         st.info("Gecikmiş ödeme bulunmuyor.")
     st.markdown("### Satış Analitiği Özeti")
@@ -3010,7 +3037,7 @@ elif menu == "Fatura işlemleri":
 
     # ---- Sütun güvenliği + benzersiz ID ----
     gerekli_kolonlar = [
-        "ID","Müşteri Adı","Proforma No","Fatura No","Fatura Tarihi","Tutar",
+        "ID","Müşteri Adı","Proforma No","Fatura No","Fatura Tarihi","Tutar","Ödenen Tutar",
         "Vade (gün)","Vade Tarihi","Ülke","Satış Temsilcisi","Ödeme Şekli",
         "Commercial Invoice","Sağlık Sertifikası","Packing List","Konşimento",
         "İhracat Beyannamesi","Fatura PDF","Sipariş Formu","Yük Resimleri",
@@ -3018,7 +3045,12 @@ elif menu == "Fatura işlemleri":
     ]
     for c in gerekli_kolonlar:
         if c not in df_evrak.columns:
-            df_evrak[c] = False if c == "Ödendi" else ""
+            if c == "Ödendi":
+                df_evrak[c] = False
+            elif c == "Ödenen Tutar":
+                df_evrak[c] = 0.0
+            else:
+                df_evrak[c] = ""
 
     bos_id_mask = df_evrak["ID"].astype(str).str.strip().isin(["","nan"])
     if bos_id_mask.any():
@@ -3420,6 +3452,13 @@ elif menu == "Fatura işlemleri":
             df_evrak.at[idx, "Ülke"]             = ulke
             df_evrak.at[idx, "Satış Temsilcisi"] = temsilci
             df_evrak.at[idx, "Ödeme Şekli"]      = odeme
+            mevcut_odeme = pd.to_numeric(
+                pd.Series(df_evrak.at[idx, "Ödenen Tutar"]), errors="coerce"
+            ).fillna(0.0).iloc[0]
+            tutar_float = float(tutar_num) if pd.notnull(tutar_num) else 0.0
+            df_evrak.at[idx, "Ödenen Tutar"] = min(max(mevcut_odeme, 0.0), tutar_float)
+            if tutar_float > 0 and df_evrak.at[idx, "Ödenen Tutar"] >= tutar_float - 0.01:
+                df_evrak.at[idx, "Ödendi"] = True            
             for col, _ in evrak_tipleri:
                 df_evrak.at[idx, col] = file_urls.get(col, "")
             islem = "güncellendi"
@@ -3437,6 +3476,7 @@ elif menu == "Fatura işlemleri":
                 "Ülke": ulke,
                 "Satış Temsilcisi": temsilci,
                 "Ödeme Şekli": odeme,
+                "Ödenen Tutar": 0.0,                
                 "Ödendi": False,
                 **{col: file_urls.get(col, "") for col, _ in evrak_tipleri},
                 "Sipariş Formu": "",
@@ -3448,7 +3488,14 @@ elif menu == "Fatura işlemleri":
         if "Tutar_num" not in df_evrak.columns:
             df_evrak["Tutar_num"] = pd.NA
         df_evrak["Tutar_num"] = pd.to_numeric(df_evrak["Tutar_num"], errors="coerce")
-
+        if "Ödenen Tutar" not in df_evrak.columns:
+            df_evrak["Ödenen Tutar"] = 0.0
+        df_evrak["Ödenen Tutar"] = pd.to_numeric(df_evrak["Ödenen Tutar"], errors="coerce").fillna(0.0)
+        df_evrak["Ödenen Tutar"] = df_evrak["Ödenen Tutar"].clip(lower=0)
+        df_evrak["Ödenen Tutar"] = np.minimum(
+            df_evrak["Ödenen Tutar"],
+            df_evrak["Tutar_num"].fillna(np.inf)
+        )
 
         update_excel()
         st.success(f"Evrak {islem}!")
@@ -3463,14 +3510,22 @@ elif menu == "Tahsilat Planı":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Tahsilat Planı</h2>", unsafe_allow_html=True)
 
     # Gerekli kolonlar yoksa ekle
-    for c in ["Müşteri Adı","Fatura No","Fatura Tarihi","Vade Tarihi","Tutar_num","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
+    for c in ["Müşteri Adı","Fatura No","Fatura Tarihi","Vade Tarihi","Tutar_num","Ödenen Tutar","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
         if c not in df_evrak.columns:
-            df_evrak[c] = "" if c != "Ödendi" else False
+            if c == "Ödendi":
+                df_evrak[c] = False
+            elif c == "Ödenen Tutar" or c == "Tutar_num":
+                df_evrak[c] = 0.0
+            else:
+                df_evrak[c] = ""
 
     # Sadece vadesi olan kayıtlar
     vade_df = df_evrak.copy()
+    vade_df["Tutar_num"] = pd.to_numeric(vade_df["Tutar_num"], errors="coerce").fillna(0.0)
+    vade_df["Ödenen Tutar"] = pd.to_numeric(vade_df["Ödenen Tutar"], errors="coerce").fillna(0.0)    
     vade_df["Vade Tarihi"] = pd.to_datetime(vade_df["Vade Tarihi"], errors="coerce")
     vade_df = vade_df[vade_df["Vade Tarihi"].notna()]
+    vade_df["Kalan Bakiye"] = (vade_df["Tutar_num"] - vade_df["Ödenen Tutar"]).clip(lower=0.0)    
 
     if vade_df.empty:
         st.info("Vade tarihi girilmiş kayıt bulunmuyor.")
@@ -3479,15 +3534,16 @@ elif menu == "Tahsilat Planı":
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - today).dt.days
 
         # Ödenmemişler üzerinden özet kutucukları
-        acik = vade_df[~vade_df["Ödendi"]].copy()
+        acik_mask = vade_df["Kalan Bakiye"] > 0.01
+        acik = vade_df[acik_mask].copy()
         vadesi_gelmemis = acik[acik["Kalan Gün"] > 0]
         bugun = acik[acik["Kalan Gün"] == 0]
         gecikmis = acik[acik["Kalan Gün"] < 0]
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Tutar_num'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
-        c2.metric("Bugün Vadesi",   f"{float(bugun['Tutar_num'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
-        c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Tutar_num'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
+        c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Kalan Bakiye'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
+        c2.metric("Bugün Vadesi",   f"{float(bugun['Kalan Bakiye'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
+        c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Kalan Bakiye'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
 
         st.markdown("---")
 
@@ -3503,17 +3559,21 @@ elif menu == "Tahsilat Planı":
         if tem_f:
             view = view[view["Satış Temsilcisi"].isin(tem_f)]
         if durum_f == "Ödenmemiş (varsayılan)":
-            view = view[~view["Ödendi"]]
+            view = view[view["Kalan Bakiye"] > 0.01]
         elif durum_f == "Sadece Ödenmiş":
-            view = view[view["Ödendi"]]
+            view = view[view["Kalan Bakiye"] <= 0.01]
 
         # Görüntü tablosu (görsel kopya)
         show = view.copy()
         show["Vade Tarihi"] = pd.to_datetime(show["Vade Tarihi"]).dt.strftime("%d/%m/%Y")
         if "Fatura Tarihi" in show.columns:
-            show["Fatura Tarihi"] = pd.to_datetime(show["Fatura Tarihi"]).dt.strftime("%d/%m/%Y")        
+            show["Fatura Tarihi"] = pd.to_datetime(show["Fatura Tarihi"]).dt.strftime("%d/%m/%Y")
+        show["Ödenen Tutar"] = pd.to_numeric(show["Ödenen Tutar"], errors="coerce").fillna(0.0)
+        show["Kalan Bakiye"] = (show["Tutar_num"].fillna(0.0) - show["Ödenen Tutar"]).clip(lower=0.0)  
         show["Tutar"] = show["Tutar_num"].map(lambda x: f"{float(x):,.2f} USD")
-        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Fatura Tarihi","Vade Tarihi","Kalan Gün","Tutar","Ödendi"]
+        show["Ödenen Tutar"] = show["Ödenen Tutar"].map(lambda x: f"{float(x):,.2f} USD")
+        show["Kalan Bakiye"] = show["Kalan Bakiye"].map(lambda x: f"{float(x):,.2f} USD")
+        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Fatura Tarihi","Vade Tarihi","Kalan Gün","Tutar","Ödenen Tutar","Kalan Bakiye","Ödendi"]
         cols = [c for c in cols if c in show.columns]
         st.dataframe(show[cols].sort_values(["Kalan Gün","Vade Tarihi"]), use_container_width=True)
 
@@ -3527,16 +3587,55 @@ elif menu == "Tahsilat Planı":
                 format_func=lambda i: f"{view.loc[view['_row']==i,'Müşteri Adı'].values[0]} | {view.loc[view['_row']==i,'Fatura No'].values[0]}"
             )
 
-            # Seçilen satırın mevcut ödeme durumunu checkbox'ta varsayılan değer olarak göster
-            mevcut_odendi = bool(view.loc[view["_row"] == sec, "Ödendi"].iloc[0])
-            odendi_mi = st.checkbox("Ödendi olarak işaretle", value=mevcut_odendi)
-            if st.button("Kaydet / Güncelle"):
-                # Ana df_evrak’taki satıra yaz
-                # _row önceki index, aynı sırayı df_evrak’ta güncellemek için kullanıyoruz
-                ana_index = view.loc[view["_row"] == sec, "_row"].values[0]
+            secili = view.loc[view["_row"] == sec].iloc[0]
+            toplam_tutar = float(secili.get("Tutar_num", 0.0) or 0.0)
+            odenen_tutar = float(pd.to_numeric(pd.Series(secili.get("Ödenen Tutar", 0.0)), errors="coerce").fillna(0.0).iloc[0])
+            if odenen_tutar < 0:
+                odenen_tutar = 0.0
+            kalan_bakiye = max(toplam_tutar - odenen_tutar, 0.0)
+
+            ozet_cols = st.columns(3)
+            ozet_cols[0].metric("Fatura Tutarı", f"{toplam_tutar:,.2f} USD")
+            ozet_cols[1].metric("Ödenen Tutar", f"{odenen_tutar:,.2f} USD")
+            ozet_cols[2].metric("Kalan Bakiye", f"{kalan_bakiye:,.2f} USD")
+
+            min_ara_odeme = -odenen_tutar
+            max_ara_odeme = max(toplam_tutar - odenen_tutar, 0.0)
+
+            with st.form(f"tahsilat_guncelle_{sec}"):
+                mevcut_odendi = bool(secili.get("Ödendi", False))
+                ara_odeme = st.number_input(
+                    "Ara ödeme tutarı (USD)",
+                    min_value=float(min_ara_odeme),
+                    max_value=float(max_ara_odeme),
+                    value=0.0,
+                    step=100.0,
+                    format="%.2f",
+                    key=f"ara_odeme_input_{sec}"
+                )
+                st.caption("Not: Gerekirse eksi tutar girerek önceki tahsilatı azaltabilirsiniz.")
+                odendi_mi = st.checkbox(
+                    "Ödendi olarak işaretle",
+                    value=mevcut_odendi,
+                    key=f"odendi_checkbox_{sec}"
+                )
+                kaydet = st.form_submit_button("Kaydet / Güncelle")
+
+            if kaydet:
+                ana_index = int(view.loc[view["_row"] == sec, "_row"].iloc[0])
+                yeni_odenen = odenen_tutar + float(ara_odeme)
+                yeni_odenen = max(min(yeni_odenen, toplam_tutar), 0.0)
+                if toplam_tutar <= 0:
+                    yeni_odenen = 0.0
+                if odendi_mi or yeni_odenen >= max(toplam_tutar - 0.01, 0):
+                    yeni_odenen = toplam_tutar
+                    odendi_mi = True
+                else:
+                    odendi_mi = yeni_odenen >= max(toplam_tutar - 0.01, 0)
+                df_evrak.at[ana_index, "Ödenen Tutar"] = round(yeni_odenen, 2)
                 df_evrak.at[ana_index, "Ödendi"] = bool(odendi_mi)
                 update_excel()
-                st.success("Ödeme durumu güncellendi!")
+                st.success("Tahsilat bilgisi güncellendi!")
                 st.rerun()
 
 ### ===========================
