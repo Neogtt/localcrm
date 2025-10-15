@@ -3270,6 +3270,8 @@ elif menu == "Fatura işlemleri":
 
     
     # ---- Müşteri / Proforma seçimleri ----
+    st.markdown("### Fatura Ekle")
+    
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
     musteri_options = [""] + musteri_secenek
     if st.session_state[musteri_key] not in musteri_options:
