@@ -3463,7 +3463,7 @@ elif menu == "Tahsilat Planı":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Tahsilat Planı</h2>", unsafe_allow_html=True)
 
     # Gerekli kolonlar yoksa ekle
-    for c in ["Müşteri Adı","Fatura No","Vade Tarihi","Tutar_num","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
+    for c in ["Müşteri Adı","Fatura No","Fatura Tarihi","Vade Tarihi","Tutar_num","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
         if c not in df_evrak.columns:
             df_evrak[c] = "" if c != "Ödendi" else False
 
@@ -3510,8 +3510,10 @@ elif menu == "Tahsilat Planı":
         # Görüntü tablosu (görsel kopya)
         show = view.copy()
         show["Vade Tarihi"] = pd.to_datetime(show["Vade Tarihi"]).dt.strftime("%d/%m/%Y")
+        if "Fatura Tarihi" in show.columns:
+            show["Fatura Tarihi"] = pd.to_datetime(show["Fatura Tarihi"]).dt.strftime("%d/%m/%Y")        
         show["Tutar"] = show["Tutar_num"].map(lambda x: f"{float(x):,.2f} USD")
-        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Vade Tarihi","Kalan Gün","Tutar","Ödendi"]
+        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Fatura Tarihi","Vade Tarihi","Kalan Gün","Tutar","Ödendi"]
         cols = [c for c in cols if c in show.columns]
         st.dataframe(show[cols].sort_values(["Kalan Gün","Vade Tarihi"]), use_container_width=True)
 
