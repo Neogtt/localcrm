@@ -3215,7 +3215,60 @@ elif menu == "Fatura işlemleri":
                 st.success("Fatura tarihleri güncellendi!")
                 st.rerun()
 
+    st.markdown("### Fatura Kaydı Sil")
 
+    if df_evrak.empty:
+        st.info("Silinecek fatura kaydı bulunmuyor.")
+    else:
+        delete_options = df_evrak.index.tolist()
+
+        def _format_delete_option(idx):
+            row = df_evrak.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma_no = str(row.get("Proforma No", "")).strip()
+
+            invoice_date = row.get("Fatura Tarihi", "")
+            invoice_date_str = ""
+            if pd.notna(invoice_date):
+                invoice_ts = pd.to_datetime(invoice_date, errors="coerce")
+                if pd.notna(invoice_ts):
+                    invoice_date_str = invoice_ts.strftime("%d/%m/%Y")
+
+            tutar_raw = row.get("Tutar", "")
+            tutar_str = ""
+            if str(tutar_raw).strip():
+                tutar_str = f"{smart_to_num(tutar_raw):,.2f} USD"
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma_no:
+                parts.append(f"Proforma: {proforma_no}")
+            if invoice_date_str:
+                parts.append(f"Tarih: {invoice_date_str}")
+            if tutar_str:
+                parts.append(f"Tutar: {tutar_str}")
+            return " | ".join(parts)
+
+        with st.form("delete_invoice_form"):
+            silinecek_fatura = st.selectbox(
+                "Silmek istediğiniz faturayı seçin",
+                options=delete_options,
+                format_func=_format_delete_option,
+                key="invoice_delete_select",
+            )
+            confirm_delete = st.checkbox("Silme işlemini onaylıyorum")
+            delete_submitted = st.form_submit_button("Seçili Faturayı Sil")
+
+        if delete_submitted:
+            if confirm_delete:
+                df_evrak = df_evrak.drop(index=silinecek_fatura).reset_index(drop=True)
+                update_excel()
+                st.success("Seçilen fatura kaydı silindi.")
+                st.rerun()
+            else:
+                st.warning("Silme işlemini onaylamak için kutucuğu işaretleyin.")
+
+    
     # ---- Müşteri / Proforma seçimleri ----
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
     musteri_options = [""] + musteri_secenek
