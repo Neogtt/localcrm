@@ -3177,162 +3177,10 @@ elif menu == "Fatura işlemleri":
                 st.session_state[proforma_key] = str(hedef.get("Proforma No", ""))
                 st.session_state[pending_reset_flag_key] = True
                 st.rerun()
-
-    st.markdown("### Kayıtlı Fatura Güncelle")
-
-    invoice_mask = df_evrak["Fatura No"].astype(str).str.strip() != ""
-    existing_invoices = df_evrak[invoice_mask].copy()
-
-    if existing_invoices.empty:
-        st.info("Güncellenebilecek kayıtlı fatura bulunmuyor.")
-    else:
-        def _safe_date(value, fallback=None):
-            if isinstance(value, datetime.datetime):
-                return value.date()
-            if isinstance(value, datetime.date):
-                return value
-            try:
-                ts = pd.to_datetime(value, errors="coerce")
-            except Exception:
-                ts = pd.NaT
-            if pd.isna(ts):
-                return fallback
-            return ts.date()
-
-        def _format_invoice(idx):
-            row = existing_invoices.loc[idx]
-            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
-            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
-            proforma = str(row.get("Proforma No", "")).strip()
-            invoice_date = _safe_date(row.get("Fatura Tarihi"))
-            due_date = _safe_date(row.get("Vade Tarihi"))
-
-            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
-            if proforma:
-                parts.append(f"Proforma: {proforma}")
-            if invoice_date:
-                parts.append(f"Fatura Tarihi: {invoice_date.strftime('%d/%m/%Y')}")
-            if due_date:
-                parts.append(f"Vade Tarihi: {due_date.strftime('%d/%m/%Y')}")
-            return " | ".join(parts)
-
-        invoice_indices = existing_invoices.index.tolist()
-        selected_invoice = st.selectbox(
-            "Güncellemek istediğiniz faturayı seçin",
-            options=invoice_indices,
-            format_func=_format_invoice,
-            key="invoice_edit_select",
-        )
-
-        if invoice_indices:
-            secili_satir = existing_invoices.loc[selected_invoice]
-            default_invoice_date = _safe_date(secili_satir.get("Fatura Tarihi"), fallback=datetime.date.today())
-            default_due_date = _safe_date(secili_satir.get("Vade Tarihi"), fallback=default_invoice_date)
-
-            mevcut_tutar = secili_satir.get("Tutar", "")
-            if pd.isna(mevcut_tutar):
-                mevcut_tutar = ""
-            else:
-                mevcut_tutar = str(mevcut_tutar)
-
-            with st.form("update_invoice_details"):
-                yeni_fatura_tarihi = st.date_input("Yeni Fatura Tarihi", value=default_invoice_date)
-                yeni_vade_tarihi = st.date_input("Yeni Vade Tarihi", value=default_due_date)
-                yeni_tutar = st.text_input("Yeni Fatura Tutarı (USD)", value=mevcut_tutar)
-                update_submitted = st.form_submit_button("Bilgileri Güncelle")
-
-            if update_submitted:
-                df_evrak.at[selected_invoice, "Fatura Tarihi"] = yeni_fatura_tarihi
-                df_evrak.at[selected_invoice, "Vade Tarihi"] = yeni_vade_tarihi
-                df_evrak.at[selected_invoice, "Tutar"] = yeni_tutar
-
-                yeni_tutar_num = smart_to_num(yeni_tutar)
-                df_evrak.at[selected_invoice, "Tutar_num"] = yeni_tutar_num
-                
-                try:
-                    gun_farki = (pd.Timestamp(yeni_vade_tarihi) - pd.Timestamp(yeni_fatura_tarihi)).days
-                    df_evrak.at[selected_invoice, "Vade (gün)"] = str(gun_farki)
-                except Exception:
-                    df_evrak.at[selected_invoice, "Vade (gün)"] = ""
-
-
-                if "Ödenen Tutar" in df_evrak.columns:
-                    mevcut_odeme = pd.to_numeric(
-                        pd.Series(df_evrak.at[selected_invoice, "Ödenen Tutar"]), errors="coerce"
-                    ).fillna(0.0).iloc[0]
-                    tutar_float = float(yeni_tutar_num) if pd.notnull(yeni_tutar_num) else 0.0
-                    guncel_odeme = min(max(mevcut_odeme, 0.0), tutar_float)
-                    df_evrak.at[selected_invoice, "Ödenen Tutar"] = guncel_odeme
-
-                    if "Ödendi" in df_evrak.columns:
-                        if tutar_float > 0:
-                            df_evrak.at[selected_invoice, "Ödendi"] = guncel_odeme >= tutar_float - 0.01
-                        else:
-                            df_evrak.at[selected_invoice, "Ödendi"] = False
-                elif "Ödendi" in df_evrak.columns:
-                    df_evrak.at[selected_invoice, "Ödendi"] = False
-                    
-                update_excel()
-                st.success("Fatura bilgileri güncellendi!")
-                st.rerun()
-
-    st.markdown("### Fatura Kaydı Sil")
-
-    if df_evrak.empty:
-        st.info("Silinecek fatura kaydı bulunmuyor.")
-    else:
-        delete_options = df_evrak.index.tolist()
-
-        def _format_delete_option(idx):
-            row = df_evrak.loc[idx]
-            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
-            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
-            proforma_no = str(row.get("Proforma No", "")).strip()
-
-            invoice_date = row.get("Fatura Tarihi", "")
-            invoice_date_str = ""
-            if pd.notna(invoice_date):
-                invoice_ts = pd.to_datetime(invoice_date, errors="coerce")
-                if pd.notna(invoice_ts):
-                    invoice_date_str = invoice_ts.strftime("%d/%m/%Y")
-
-            tutar_raw = row.get("Tutar", "")
-            tutar_str = ""
-            if str(tutar_raw).strip():
-                tutar_str = f"{smart_to_num(tutar_raw):,.2f} USD"
-
-            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
-            if proforma_no:
-                parts.append(f"Proforma: {proforma_no}")
-            if invoice_date_str:
-                parts.append(f"Tarih: {invoice_date_str}")
-            if tutar_str:
-                parts.append(f"Tutar: {tutar_str}")
-            return " | ".join(parts)
-
-        with st.form("delete_invoice_form"):
-            silinecek_fatura = st.selectbox(
-                "Silmek istediğiniz faturayı seçin",
-                options=delete_options,
-                format_func=_format_delete_option,
-                key="invoice_delete_select",
-            )
-            confirm_delete = st.checkbox("Silme işlemini onaylıyorum")
-            delete_submitted = st.form_submit_button("Seçili Faturayı Sil")
-
-        if delete_submitted:
-            if confirm_delete:
-                df_evrak = df_evrak.drop(index=silinecek_fatura).reset_index(drop=True)
-                update_excel()
-                st.success("Seçilen fatura kaydı silindi.")
-                st.rerun()
-            else:
-                st.warning("Silme işlemini onaylamak için kutucuğu işaretleyin.")
-
-    
+  
     # ---- Müşteri / Proforma seçimleri ----
     st.markdown("### Fatura Ekle")
-    
+ 
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
     musteri_options = [""] + musteri_secenek
     if st.session_state[musteri_key] not in musteri_options:
@@ -3487,7 +3335,7 @@ elif menu == "Fatura işlemleri":
             tutar_float = float(tutar_num) if pd.notnull(tutar_num) else 0.0
             df_evrak.at[idx, "Ödenen Tutar"] = min(max(mevcut_odeme, 0.0), tutar_float)
             if tutar_float > 0 and df_evrak.at[idx, "Ödenen Tutar"] >= tutar_float - 0.01:
-                df_evrak.at[idx, "Ödendi"] = True            
+                df_evrak.at[idx, "Ödendi"] = True   
             for col, _ in evrak_tipleri:
                 df_evrak.at[idx, col] = file_urls.get(col, "")
             islem = "güncellendi"
@@ -3505,7 +3353,7 @@ elif menu == "Fatura işlemleri":
                 "Ülke": ulke,
                 "Satış Temsilcisi": temsilci,
                 "Ödeme Şekli": odeme,
-                "Ödenen Tutar": 0.0,                
+                "Ödenen Tutar": 0.0,       
                 "Ödendi": False,
                 **{col: file_urls.get(col, "") for col, _ in evrak_tipleri},
                 "Sipariş Formu": "",
@@ -3529,6 +3377,159 @@ elif menu == "Fatura işlemleri":
         update_excel()
         st.success(f"Evrak {islem}!")
         st.rerun()
+
+    st.markdown("### Kayıtlı Fatura Güncelle")
+
+    invoice_mask = df_evrak["Fatura No"].astype(str).str.strip() != ""
+    existing_invoices = df_evrak[invoice_mask].copy()
+
+    if existing_invoices.empty:
+        st.info("Güncellenebilecek kayıtlı fatura bulunmuyor.")
+    else:
+        def _safe_date(value, fallback=None):
+            if isinstance(value, datetime.datetime):
+                return value.date()
+            if isinstance(value, datetime.date):
+                return value
+            try:
+                ts = pd.to_datetime(value, errors="coerce")
+            except Exception:
+                ts = pd.NaT
+            if pd.isna(ts):
+                return fallback
+            return ts.date()
+
+        def _format_invoice(idx):
+            row = existing_invoices.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma = str(row.get("Proforma No", "")).strip()
+            invoice_date = _safe_date(row.get("Fatura Tarihi"))
+            due_date = _safe_date(row.get("Vade Tarihi"))
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma:
+                parts.append(f"Proforma: {proforma}")
+            if invoice_date:
+                parts.append(f"Fatura Tarihi: {invoice_date.strftime('%d/%m/%Y')}")
+            if due_date:
+                parts.append(f"Vade Tarihi: {due_date.strftime('%d/%m/%Y')}")
+            return " | ".join(parts)
+
+        invoice_indices = existing_invoices.index.tolist()
+        selected_invoice = st.selectbox(
+            "Güncellemek istediğiniz faturayı seçin",
+            options=invoice_indices,
+            format_func=_format_invoice,
+            key="invoice_edit_select",
+        )
+
+        if invoice_indices:
+            secili_satir = existing_invoices.loc[selected_invoice]
+            default_invoice_date = _safe_date(secili_satir.get("Fatura Tarihi"), fallback=datetime.date.today())
+            default_due_date = _safe_date(secili_satir.get("Vade Tarihi"), fallback=default_invoice_date)
+
+            mevcut_tutar = secili_satir.get("Tutar", "")
+            if pd.isna(mevcut_tutar):
+                mevcut_tutar = ""
+            else:
+                mevcut_tutar = str(mevcut_tutar)
+
+            with st.form("update_invoice_details"):
+                yeni_fatura_tarihi = st.date_input("Yeni Fatura Tarihi", value=default_invoice_date)
+                yeni_vade_tarihi = st.date_input("Yeni Vade Tarihi", value=default_due_date)
+                yeni_tutar = st.text_input("Yeni Fatura Tutarı (USD)", value=mevcut_tutar)
+                update_submitted = st.form_submit_button("Bilgileri Güncelle")
+
+            if update_submitted:
+                df_evrak.at[selected_invoice, "Fatura Tarihi"] = yeni_fatura_tarihi
+                df_evrak.at[selected_invoice, "Vade Tarihi"] = yeni_vade_tarihi
+                df_evrak.at[selected_invoice, "Tutar"] = yeni_tutar
+
+                yeni_tutar_num = smart_to_num(yeni_tutar)
+                df_evrak.at[selected_invoice, "Tutar_num"] = yeni_tutar_num
+                
+                try:
+                    gun_farki = (pd.Timestamp(yeni_vade_tarihi) - pd.Timestamp(yeni_fatura_tarihi)).days
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = str(gun_farki)
+                except Exception:
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = ""
+
+
+                if "Ödenen Tutar" in df_evrak.columns:
+                    mevcut_odeme = pd.to_numeric(
+                        pd.Series(df_evrak.at[selected_invoice, "Ödenen Tutar"]), errors="coerce"
+                    ).fillna(0.0).iloc[0]
+                    tutar_float = float(yeni_tutar_num) if pd.notnull(yeni_tutar_num) else 0.0
+                    guncel_odeme = min(max(mevcut_odeme, 0.0), tutar_float)
+                    df_evrak.at[selected_invoice, "Ödenen Tutar"] = guncel_odeme
+
+                    if "Ödendi" in df_evrak.columns:
+                        if tutar_float > 0:
+                            df_evrak.at[selected_invoice, "Ödendi"] = guncel_odeme >= tutar_float - 0.01
+                        else:
+                            df_evrak.at[selected_invoice, "Ödendi"] = False
+                elif "Ödendi" in df_evrak.columns:
+                    df_evrak.at[selected_invoice, "Ödendi"] = False
+                    
+                update_excel()
+                st.success("Fatura bilgileri güncellendi!")
+                st.rerun()
+
+    st.markdown("### Fatura Kaydı Sil")
+
+    if df_evrak.empty:
+        st.info("Silinecek fatura kaydı bulunmuyor.")
+    else:
+        delete_options = df_evrak.index.tolist()
+
+        def _format_delete_option(idx):
+            row = df_evrak.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma_no = str(row.get("Proforma No", "")).strip()
+
+            invoice_date = row.get("Fatura Tarihi", "")
+            invoice_date_str = ""
+            if pd.notna(invoice_date):
+                invoice_ts = pd.to_datetime(invoice_date, errors="coerce")
+                if pd.notna(invoice_ts):
+                    invoice_date_str = invoice_ts.strftime("%d/%m/%Y")
+
+            tutar_raw = row.get("Tutar", "")
+            tutar_str = ""
+            if str(tutar_raw).strip():
+                tutar_str = f"{smart_to_num(tutar_raw):,.2f} USD"
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma_no:
+                parts.append(f"Proforma: {proforma_no}")
+            if invoice_date_str:
+                parts.append(f"Tarih: {invoice_date_str}")
+            if tutar_str:
+                parts.append(f"Tutar: {tutar_str}")
+            return " | ".join(parts)
+
+        with st.form("delete_invoice_form"):
+            silinecek_fatura = st.selectbox(
+                "Silmek istediğiniz faturayı seçin",
+                options=delete_options,
+                format_func=_format_delete_option,
+                key="invoice_delete_select",
+            )
+            confirm_delete = st.checkbox("Silme işlemini onaylıyorum")
+            delete_submitted = st.form_submit_button("Seçili Faturayı Sil")
+
+        if delete_submitted:
+            if confirm_delete:
+                df_evrak = df_evrak.drop(index=silinecek_fatura).reset_index(drop=True)
+                update_excel()
+                st.success("Seçilen fatura kaydı silindi.")
+                st.rerun()
+            else:
+                st.warning("Silme işlemini onaylamak için kutucuğu işaretleyin.")
+
+    
 
 
 ### ===========================
