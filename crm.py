@@ -3178,7 +3178,7 @@ elif menu == "Fatura işlemleri":
                 st.session_state[pending_reset_flag_key] = True
                 st.rerun()
 
-    st.markdown("### Kayıtlı Fatura Tarihlerini Güncelle")
+    st.markdown("### Kayıtlı Fatura Güncelle")
 
     invoice_mask = df_evrak["Fatura No"].astype(str).str.strip() != ""
     existing_invoices = df_evrak[invoice_mask].copy()
@@ -3229,22 +3229,51 @@ elif menu == "Fatura işlemleri":
             default_invoice_date = _safe_date(secili_satir.get("Fatura Tarihi"), fallback=datetime.date.today())
             default_due_date = _safe_date(secili_satir.get("Vade Tarihi"), fallback=default_invoice_date)
 
-            with st.form("update_invoice_dates"):
+            mevcut_tutar = secili_satir.get("Tutar", "")
+            if pd.isna(mevcut_tutar):
+                mevcut_tutar = ""
+            else:
+                mevcut_tutar = str(mevcut_tutar)
+
+            with st.form("update_invoice_details"):
                 yeni_fatura_tarihi = st.date_input("Yeni Fatura Tarihi", value=default_invoice_date)
                 yeni_vade_tarihi = st.date_input("Yeni Vade Tarihi", value=default_due_date)
-                update_submitted = st.form_submit_button("Tarihleri Güncelle")
+                yeni_tutar = st.text_input("Yeni Fatura Tutarı (USD)", value=mevcut_tutar)
+                update_submitted = st.form_submit_button("Bilgileri Güncelle")
 
             if update_submitted:
                 df_evrak.at[selected_invoice, "Fatura Tarihi"] = yeni_fatura_tarihi
                 df_evrak.at[selected_invoice, "Vade Tarihi"] = yeni_vade_tarihi
+                df_evrak.at[selected_invoice, "Tutar"] = yeni_tutar
+
+                yeni_tutar_num = smart_to_num(yeni_tutar)
+                df_evrak.at[selected_invoice, "Tutar_num"] = yeni_tutar_num
+                
                 try:
                     gun_farki = (pd.Timestamp(yeni_vade_tarihi) - pd.Timestamp(yeni_fatura_tarihi)).days
                     df_evrak.at[selected_invoice, "Vade (gün)"] = str(gun_farki)
                 except Exception:
                     df_evrak.at[selected_invoice, "Vade (gün)"] = ""
 
+
+                if "Ödenen Tutar" in df_evrak.columns:
+                    mevcut_odeme = pd.to_numeric(
+                        pd.Series(df_evrak.at[selected_invoice, "Ödenen Tutar"]), errors="coerce"
+                    ).fillna(0.0).iloc[0]
+                    tutar_float = float(yeni_tutar_num) if pd.notnull(yeni_tutar_num) else 0.0
+                    guncel_odeme = min(max(mevcut_odeme, 0.0), tutar_float)
+                    df_evrak.at[selected_invoice, "Ödenen Tutar"] = guncel_odeme
+
+                    if "Ödendi" in df_evrak.columns:
+                        if tutar_float > 0:
+                            df_evrak.at[selected_invoice, "Ödendi"] = guncel_odeme >= tutar_float - 0.01
+                        else:
+                            df_evrak.at[selected_invoice, "Ödendi"] = False
+                elif "Ödendi" in df_evrak.columns:
+                    df_evrak.at[selected_invoice, "Ödendi"] = False
+                    
                 update_excel()
-                st.success("Fatura tarihleri güncellendi!")
+                st.success("Fatura bilgileri güncellendi!")
                 st.rerun()
 
     st.markdown("### Fatura Kaydı Sil")
