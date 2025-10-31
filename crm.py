@@ -12,7 +12,7 @@ from email.utils import make_msgid
 import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="ŞEKEROĞLU İHRACAT CRM", layout="wide")
+st.set_page_config(page_title="EXPO-CRM", layout="wide")
 
 EMBED_IMAGES = True
 
@@ -57,10 +57,10 @@ def güvenli_sil(path, tekrar=5, bekle=1):
 
 # ==== KULLANICI GİRİŞİ SİSTEMİ ====
 USERS = {
-    "export1": "Seker12345!",
-    "admin": "Seker12345!",
-    "Boss": "Seker12345!",
-    "Muhammed": "Seker12345!",
+    "export1": "Expo12345!",
+    "admin": "Expo12345!",
+    "Export2": "Expo12345!",
+    "Export3": "Expo12345!",
 }
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -68,7 +68,7 @@ if "sync_status" not in st.session_state:
     st.session_state.sync_status = None
 
 def login_screen():
-    st.title("ŞEKEROĞLU CRM - Giriş Ekranı")
+    st.title("EXPO-CRM - Giriş Ekranı")
     username = st.text_input("Kullanıcı Adı")
     password = st.text_input("Şifre", type="password")
     if st.button("Giriş Yap"):
@@ -127,11 +127,14 @@ ulke_listesi = sorted([
     "Yemen","Yeni Zelanda","Yunanistan","Zambiya","Zimbabve"
 ]) + ["Diğer"]
 
-temsilci_listesi = ["KEMAL İLKER ÇELİKKALKAN", "HÜSEYİN POLAT", "EFE YILDIRIM", "FERHAT ŞEKEROĞLU"]
+temsilci_listesi = [
+    "KEMAL İLKER ÇELİKKALKAN",
+    "EXPO-1",
+    "EXPO-2",
+    "EXPO-3",
+]
 
 # --- Sabitler ---
-LOGO_FILE_ID     = "1DCxtSsAeR7Zfk2IQU0UMGmD0uTdNO1B3"
-LOGO_LOCAL_NAME  = "logo1.png"
 EXCEL_FILE_ID    = "1VhMSqPEVqocgAfGkpn0h7jbcGQjygveJ"
 EVRAK_KLASOR_ID  = "1jPYrxzx-vRtKfJiII1FbSpgR9a6Bsb4e"
 FIYAT_TEKLIFI_ID = "1QPTSq-LiiHKsdJbbHRZN5iB3ylLFbDoR"
@@ -167,7 +170,7 @@ FAIR_MAIL_TEMPLATES = {
             "\n\n"
             "İhtiyaçlarınızı daha iyi anlayabilmek ve iş birliği fırsatlarını görüşmek için"
             " uygun olduğunuz bir zamanı paylaşmanızı rica ederiz.\n\n"
-            "Saygılarımızla,\nŞekeroğlu İhracat Ekibi"
+            "Saygılarımızla,\nEXPO-CRM Ekibi"
         ),
     },
     "en": {
@@ -179,7 +182,7 @@ FAIR_MAIL_TEMPLATES = {
             " your business.\n\n"
             "Please let us know a convenient time for a follow-up call or meeting so that"
             " we can discuss the next steps together.\n\n"
-            "Best regards,\nŞekeroğlu Export Team"
+            "Best regards,\nEXPO-CRM Export Team"
         ),
     },
     "de": {
@@ -191,7 +194,7 @@ FAIR_MAIL_TEMPLATES = {
             " Geschäftsmöglichkeiten.\n\n"
             "Teilen Sie uns bitte mit, wann wir Sie für ein kurzes Nachgespräch erreichen"
             " können.\n\n"
-            "Mit freundlichen Grüßen\nŞekeroğlu Export Team"
+            "Mit freundlichen Grüßen\nEXPO-CRM Export Team"
         ),
     },
     "fr": {
@@ -203,7 +206,7 @@ FAIR_MAIL_TEMPLATES = {
             " à vos besoins.\n\n"
             "N’hésitez pas à nous indiquer vos disponibilités pour un échange complémentaire."
             "\n\n"
-            "Cordialement,\nÉquipe Export Şekeroğlu"
+            "Cordialement,\nÉquipe Export EXPO-CRM"
         ),
     },
     "es": {
@@ -215,7 +218,7 @@ FAIR_MAIL_TEMPLATES = {
             "\n\n"
             "Por favor, indíquenos cuándo podemos coordinar una reunión o llamada de"
             " seguimiento.\n\n"
-            "Saludos cordiales,\nEquipo de Exportación Şekeroğlu"
+            "Saludos cordiales,\nEquipo de Exportación EXPO-CRM"
         ),
     },
     "ar": {
@@ -225,7 +228,7 @@ FAIR_MAIL_TEMPLATES = {
             "نشكر لكم زيارتكم لجناحنا خلال المعرض واهتمامكم بمنتجات شكر أوغلو. يسعدنا"
             " تزويدكم بمعلومات إضافية وبحث فرص التعاون المشتركة.\n\n"
             "يرجى تزويدنا بالوقت المناسب للتواصل معكم والحديث عن الخطوات القادمة.\n\n"
-            "مع أطيب التحيات،\nفريق تصدير شكر أوغلو"
+            "مع أطيب التحيات،\nفريق تصدير EXPO-CRM"
         ),
     },
 }
@@ -239,7 +242,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
                 " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
                 " günler temenni ederiz.</p>"
-                "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+                "<p>Saygılarımızla,<br>EXPO-CRM</p>"
             ),
         },
         "en": {
@@ -248,7 +251,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Dear business partner,</p>"
                 "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you"
                 " for your trust and cooperation.</p>"
-                "<p>Best regards,<br>Sekeroğlu Group</p>"
+                "<p>Best regards,<br>EXPO-CRM</p>"
             ),
         },
         "de": {
@@ -258,7 +261,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>wir wünschen Ihnen und Ihren Liebsten ein gesegnetes und"
                 " erfolgreiches Zuckerfest. Vielen Dank für die vertrauensvolle"
                 " Zusammenarbeit.</p>"
-                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+                "<p>Mit freundlichen Grüßen,<br>EXPO-CRM</p>"
             ),
         },
         "fr": {
@@ -267,7 +270,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Cher partenaire,</p>"
                 "<p>Nous vous souhaitons une fête de l’Aïd al-Fitr pleine de joie et de"
                 " prospérité. Merci pour votre confiance et votre collaboration.</p>"
-                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+                "<p>Cordialement,<br>EXPO-CRM</p>"
             ),
         },
         "es": {
@@ -276,7 +279,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Estimado socio,</p>"
                 "<p>Le deseamos un Eid al-Fitr lleno de alegría y prosperidad. Gracias"
                 " por su confianza y cooperación.</p>"
-                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+                "<p>Saludos cordiales,<br>EXPO-CRM</p>"
             ),
         },
         "ar": {
@@ -285,7 +288,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>شريكنا العزيز،</p>"
                 "<p>نهنئكم بعيد الفطر المبارك ونتمنى لكم ولعائلتكم أياماً مليئة"
                 " بالخير والنجاح. نشكركم على ثقتكم وشراكتكم المستمرة.</p>"
-                "<p>مع أطيب التحيات،<br>مجموعة شكر أوغلو</p>"
+                "<p>مع أطيب التحيات،<br>فريق EXPO-CRM</p>"
             ),
         },
     },
@@ -296,7 +299,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Değerli iş ortağımız,</p>"
                 "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne"
                 " kadar gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
-                "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+                "<p>En iyi dileklerimizle,<br>EXPO-CRM</p>"
             ),
         },
         "en": {
@@ -305,7 +308,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Dear business partner,</p>"
                 "<p>May this Eid al-Adha bring peace, happiness, and success to you and"
                 " your loved ones. Thank you for your continued cooperation.</p>"
-                "<p>Sincerely,<br>Sekeroğlu Group</p>"
+                "<p>Sincerely,<br>EXPO-CRM</p>"
             ),
         },
         "de": {
@@ -314,7 +317,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Sehr geehrter Geschäftspartner,</p>"
                 "<p>möge das Opferfest Ihnen und Ihrem Team Frieden, Gesundheit und"
                 " Erfolg bringen. Wir danken Ihnen für die gute Zusammenarbeit.</p>"
-                "<p>Mit freundlichen Grüßen,<br>Sekeroğlu Group</p>"
+                "<p>Mit freundlichen Grüßen,<br>EXPO-CRM</p>"
             ),
         },
         "fr": {
@@ -323,7 +326,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Cher partenaire,</p>"
                 "<p>Que cette fête de l’Aïd al-Adha vous apporte paix, bonheur et"
                 " réussite. Merci pour votre collaboration précieuse.</p>"
-                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+                "<p>Cordialement,<br>EXPO-CRM</p>"
             ),
         },
         "es": {
@@ -332,7 +335,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Estimado socio,</p>"
                 "<p>Que este Eid al-Adha le traiga paz, felicidad y éxito a usted y a"
                 " su equipo. Gracias por su apoyo continuo.</p>"
-                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+                "<p>Saludos cordiales,<br>EXPO-CRM</p>"
             ),
         },
         "ar": {
@@ -353,7 +356,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür"
                 " ederiz. Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı"
                 " getirmesini dileriz.</p>"
-                "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+                "<p>Sevgi ve saygılarımızla,<br>EXPO-CRM</p>"
             ),
         },
         "en": {
@@ -362,7 +365,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Dear business partner,</p>"
                 "<p>Thank you for the trust and partnership throughout the past year. We"
                 " wish you and your team a healthy and prosperous New Year.</p>"
-                "<p>Warm regards,<br>Sekeroğlu Group</p>"
+                "<p>Warm regards,<br>EXPO-CRM</p>"
             ),
         },
         "de": {
@@ -371,7 +374,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Sehr geehrter Geschäftspartner,</p>"
                 "<p>vielen Dank für Ihre Unterstützung im vergangenen Jahr. Wir wünschen"
                 " Ihnen und Ihrem Team ein gesundes und erfolgreiches neues Jahr.</p>"
-                "<p>Mit besten Grüßen,<br>Sekeroğlu Group</p>"
+                "<p>Mit besten Grüßen,<br>EXPO-CRM</p>"
             ),
         },
         "fr": {
@@ -381,7 +384,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Merci pour votre confiance tout au long de l’année écoulée. Nous vous"
                 " souhaitons, à vous et à votre équipe, une nouvelle année pleine de"
                 " santé et de réussite.</p>"
-                "<p>Cordialement,<br>Sekeroğlu Group</p>"
+                "<p>Cordialement,<br>EXPO-CRM</p>"
             ),
         },
         "es": {
@@ -391,7 +394,7 @@ HOLIDAY_MAIL_TEMPLATES = {
                 "<p>Gracias por su confianza y colaboración durante el último año. Les"
                 " deseamos a usted y a su equipo un Año Nuevo lleno de salud y"
                 " prosperidad.</p>"
-                "<p>Saludos cordiales,<br>Sekeroğlu Group</p>"
+                "<p>Saludos cordiales,<br>EXPO-CRM</p>"
             ),
         },
         "ar": {
@@ -414,12 +417,12 @@ HOLIDAY_FALLBACK_TEMPLATES = {
             "<p>Ramazan Bayramınızı en içten dileklerimizle kutlarız. İş birliğimizin"
             " artarak devam etmesini diler, sevdiklerinizle birlikte sağlıklı ve mutlu"
             " günler temenni ederiz.</p>"
-            "<p>Saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<p>Saygılarımızla,<br>EXPO-CRM</p>"
             "<hr>"
             "<p>Dear business partner,</p>"
             "<p>We sincerely wish you a joyful and prosperous Eid al-Fitr. Thank you for"
             " your trust and cooperation.</p>"
-            "<p>Best regards,<br>Sekeroğlu Group</p>"
+            "<p>Best regards,<br>EXPO-CRM</p>"
         ),
     },
     "Kurban Bayramı": {
@@ -428,12 +431,12 @@ HOLIDAY_FALLBACK_TEMPLATES = {
             "<p>Değerli iş ortağımız,</p>"
             "<p>Kurban Bayramı'nın bereket ve mutluluk getirmesini diler, bugüne kadar"
             " gösterdiğiniz iş birliği için teşekkür ederiz.</p>"
-            "<p>En iyi dileklerimizle,<br>Sekeroğlu Group</p>"
+            "<p>En iyi dileklerimizle,<br>EXPO-CRM</p>"
             "<hr>"
             "<p>Dear business partner,</p>"
             "<p>May this Eid al-Adha bring peace, happiness and success to you and your"
             " loved ones.</p>"
-            "<p>Sincerely,<br>Sekeroğlu Group</p>"
+            "<p>Sincerely,<br>EXPO-CRM</p>"
         ),
     },
     "Yeni Yıl": {
@@ -442,12 +445,12 @@ HOLIDAY_FALLBACK_TEMPLATES = {
             "<p>Değerli iş ortağımız,</p>"
             "<p>Geride bıraktığımız yıl boyunca gösterdiğiniz destek için teşekkür ederiz."
             " Yeni yılın size ve ekibinize sağlık, mutluluk ve başarı getirmesini dileriz.</p>"
-            "<p>Sevgi ve saygılarımızla,<br>Sekeroğlu Group</p>"
+            "<p>Sevgi ve saygılarımızla,<br>EXPO-CRM</p>"
             "<hr>"
             "<p>Dear business partner,</p>"
             "<p>Thank you for the trust and partnership throughout the past year. Wishing"
             " you a healthy and prosperous New Year.</p>"
-            "<p>Warm regards,<br>Sekeroğlu Group</p>"
+            "<p>Warm regards,<br>EXPO-CRM</p>"
         ),
     },
 }
@@ -474,23 +477,20 @@ def get_holiday_template_content(template_name, language_code):
 
 
 
-# --- LOGO (WEB LINKİNDEN AL) ---
-logo_url = "https://www.sekeroglugroup.com/storage/settings/xdp5r6DZIFJMNGOStqwvKCiVHDhYxA84jFr61TNp.svg"
-
-col1, col2 = st.columns([3, 7])
-with col1:
-    st.image(logo_url, width=300)
-with col2:
-    st.markdown("""
-        <style>
-        .block-container { padding-top: 0.2rem !important; }
-        </style>
-        <div style="display:flex; flex-direction:column; align-items:flex-start; width:100%; margin-bottom:10px;">
-            <h1 style="color: #219A41; font-weight: bold; font-size: 2.8em; letter-spacing:2px; margin:0; margin-top:-8px;">
-                ŞEKEROĞLU İHRACAT CRM
-            </h1>
-        </div>
-    """, unsafe_allow_html=True)
+# --- UYGULAMA BAŞLIĞI ---
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 0.2rem !important; }
+    </style>
+    <div style="display:flex; flex-direction:column; align-items:flex-start; width:100%; margin-bottom:10px;">
+        <h1 style="color: #219A41; font-weight: bold; font-size: 2.8em; letter-spacing:2px; margin:0; margin-top:-8px;">
+            EXPO-CRM
+        </h1>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 
@@ -818,23 +818,15 @@ SIGNATURE_PROFILES = {
         "full_name": "KEMAL İLKER ÇELİKKALKAN",
         "title": "Export Manager",
     },
-    "export1": {
-        "full_name": "HÜSEYİN POLAT",
-        "title": "Export Area Sales Manager",
-    },
-    "Boss": {
-        "full_name": "FERHAT ŞEKEROĞLU",
-        "title": "MEMBER OF BOARD",
-    },
 }
 
 SIGNATURE_BASE_INFO = {
-    "company": "ŞEKEROĞLU GROUP",
+    "company": "EXPO",
     "department": "International Sales & Export",
-    "phone": "+90 (342) 337 09 09",
-    "email": "export1@sekeroglugroup.com",
-    "website": "https://www.sekeroglugroup.com",
-    "address": "Sanayi mah. 60129 No'lu Cad. No : 7 Şehitkamil / Gaziantep",
+    "phone": "+90xxx xxx xx xx",
+    "email": "",
+    "website": "",
+    "address": "",
     }
 
 
@@ -843,7 +835,7 @@ def _active_signature_info():
     info = SIGNATURE_PROFILES.get(user)
     if not info:
         info = {
-            "full_name": "ŞEKEROĞLU EXPORT TEAM",
+            "full_name": "EXPO EXPORT TEAM",
             "title": "International Sales Representative",
         }
     return info
@@ -894,8 +886,8 @@ def html_signature() -> str:
 
 # E-posta göndermek için fonksiyon
 def send_email(to_email, subject, body, attachments=None, fallback_txt_path=None):
-    from_email = "todo@sekeroglugroup.com"  # Gönderen e-posta adresi
-    password = "vbgvforwwbcpzhxf"  # Gönderen e-posta şifresi
+    from_email = "kemal.ilker27@gmail.com"  # Gönderen e-posta adresi
+    password = "xxxxxxx"  # Gönderen e-posta şifresi
 
     # E-posta mesajını oluştur
     msg = EmailMessage()
@@ -986,8 +978,8 @@ def send_fair_bulk_email(to_emails, subject, body, attachments=None, embed_image
     if not to_emails:
         raise ValueError("E-posta alıcı listesi boş olamaz.")
 
-    from_email = "todo@sekeroglugroup.com"
-    password = "vbgvforwwbcpzhxf"
+    from_email = "kemal.ilker27@gmail.com"
+    password = "xxxxxxx"
 
     embed_images = EMBED_IMAGES if embed_images is None else bool(embed_images)
     inline_cid_map = inline_cid_map or {}
@@ -1228,7 +1220,7 @@ with st.sidebar.expander("🔄 Sheets Senkron"):
 ### ===========================
 
 if menu == "Genel Bakış":
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>ŞEKEROĞLU İHRACAT CRM - Genel Bakış</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>EXPO-CRM - Genel Bakış</h2>", unsafe_allow_html=True)
 
     invoices_df = df_evrak.copy()
     if "Tutar" not in invoices_df.columns:
@@ -1742,7 +1734,7 @@ if menu == "Yeni Cari Kaydı":
                     pass
 
                 send_email(
-                    to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                    to_email=["kemal.ilker27@gmail.com", "kemal.banetti@gmail.com"],
                     subject="Yeni Cari Açılışı",
                     body="Muhasebe için yeni cari açılışı ekte gönderilmiştir.",
                     attachments=attachments,
@@ -2051,7 +2043,7 @@ if menu == "Müşteri Portföyü":
                         pass
 
                     send_email(
-                        to_email=["muhasebe@sekeroglugroup.com", "h.boy@sekeroglugroup.com"],
+                    to_email=["kemal.ilker27@gmail.com", "kemal.banetti@gmail.com"],
                         subject="Güncel Cari Bilgisi",
                         body="Mevcut müşteri için güncel cari bilgileri ekte yer almaktadır.",
                         attachments=attachments,
