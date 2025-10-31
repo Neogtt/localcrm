@@ -531,7 +531,7 @@ def get_drive():
             service_account_info, scopes=scopes
         )
         gauth.credentials = credentials
-       return GoogleDrive(gauth)
+        return GoogleDrive(gauth)
 
     error_msg = (
         "Google Drive API kimlik bilgileri bulunamadı. Lütfen Streamlit "
