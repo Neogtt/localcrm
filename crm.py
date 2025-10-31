@@ -1035,10 +1035,12 @@ menuler = [
     ("Özel Gün Tebrikleri", "🎉"),
 ]
 
+ALL_MENU_NAMES = [isim for (isim, _ikon) in menuler]
+
 # 2) Tüm kullanıcılar için aynı menüler
 USER_MENU_PERMISSIONS = {
-    "Muhammed": {"ETA İzleme"},
-    "Muhammed": {"ETA İzleme", "Fatura işlemleri"},    
+    "export1": [name for name in ALL_MENU_NAMES if name not in {"Fatura işlemleri", "ETA İzleme"}],
+    "Muhammed": {"ETA İzleme", "Fatura işlemleri"},  
 }
 
 
