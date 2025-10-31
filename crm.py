@@ -11,6 +11,7 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
+from streamlit.errors import StreamlitSecretNotFoundError
 
 st.set_page_config(page_title="EXPO-CRM", layout="wide")
 
@@ -563,9 +564,26 @@ def get_drive():
         "google_drive_service_account_json",
         "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON",
     ]
-    for secret_key in secret_keys:
-        if secret_key in st.secrets:
-            service_account_info = _parse_service_account_info(st.secrets[secret_key])
+
+    secrets_obj = None
+    try:
+        secrets_obj = st.secrets
+    except Exception:
+        secrets_obj = None
+
+    if secrets_obj is not None:
+        for secret_key in secret_keys:
+            try:
+                raw_secret = secrets_obj[secret_key]
+            except StreamlitSecretNotFoundError:
+                # No secrets.toml available. Stop checking the remaining keys.
+                break
+            except KeyError:
+                continue
+            except Exception:
+                continue
+
+            service_account_info = _parse_service_account_info(raw_secret)
             if service_account_info:
                 break
             else:
