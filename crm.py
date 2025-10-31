@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
+from oauth2client.service_account import ServiceAccountCredentials
+from collections.abc import Mapping
 import io, os, datetime, tempfile, re, json, time, uuid, html
 import numpy as np
 import smtplib
@@ -495,7 +497,42 @@ with col2:
 @st.cache_resource
 def get_drive():
     gauth = GoogleAuth()
-    gauth.LocalWebserverAuth()
+
+    service_account_info = None
+
+    # Streamlit secrets are preferred when deploying to Streamlit Cloud.
+    if "google_drive_service_account" in st.secrets:
+        raw_secret = st.secrets["google_drive_service_account"]
+        if isinstance(raw_secret, str):
+            try:
+                service_account_info = json.loads(raw_secret)
+            except json.JSONDecodeError:
+                st.error("google_drive_service_account secret is not valid JSON.")
+        elif isinstance(raw_secret, Mapping):
+            service_account_info = dict(raw_secret)
+
+    if not service_account_info:
+        env_credentials = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+        if env_credentials:
+            try:
+                service_account_info = json.loads(env_credentials)
+            except json.JSONDecodeError:
+                st.error("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is not valid JSON.")
+
+    if not service_account_info:
+        credentials_path = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE")
+        if credentials_path and os.path.exists(credentials_path):
+            with open(credentials_path, "r", encoding="utf-8") as f:
+                service_account_info = json.load(f)
+
+    if service_account_info:
+        scopes = ["https://www.googleapis.com/auth/drive"]
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+            service_account_info, scopes=scopes
+        )
+        gauth.credentials = credentials
+    else:
+        gauth.LocalWebserverAuth()
     return GoogleDrive(gauth)
 drive = get_drive()
 
