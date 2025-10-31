@@ -494,29 +494,65 @@ with col2:
 
 
 
-@st.cache_resource
+def _parse_service_account_info(raw_value):
+    """Normalize service account credentials regardless of input format."""
+
+    if not raw_value:
+        return None
+
+    if isinstance(raw_value, Mapping):
+        return dict(raw_value)
+
+    if hasattr(raw_value, "to_dict") and callable(raw_value.to_dict):
+        return raw_value.to_dict()
+
+    if isinstance(raw_value, str):
+        candidate = raw_value.strip()
+
+        if os.path.isfile(candidate) and candidate.lower().endswith(".json"):
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (OSError, json.JSONDecodeError):
+                return None
+
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+
+    return None
+
+    @st.cache_resource
 def get_drive():
     gauth = GoogleAuth()
 
     service_account_info = None
 
     # Streamlit secrets are preferred when deploying to Streamlit Cloud.
-    if "google_drive_service_account" in st.secrets:
-        raw_secret = st.secrets["google_drive_service_account"]
-        if isinstance(raw_secret, str):
-            try:
-                service_account_info = json.loads(raw_secret)
-            except json.JSONDecodeError:
-                st.error("google_drive_service_account secret is not valid JSON.")
-        elif isinstance(raw_secret, Mapping):
-            service_account_info = dict(raw_secret)
+    secret_keys = [
+        "google_drive_service_account",
+        "google_drive_service_account_json",
+        "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON",
+    ]
+    for secret_key in secret_keys:
+        if secret_key in st.secrets:
+            service_account_info = _parse_service_account_info(st.secrets[secret_key])
+            if service_account_info:
+                break
+            else:
+                st.error(
+                    f"{secret_key} secret is defined but does not contain valid service "
+                    "account credentials."
+                )
 
     if not service_account_info:
         env_credentials = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
         if env_credentials:
-            try:
-                service_account_info = json.loads(env_credentials)
-            except json.JSONDecodeError:
+            parsed = _parse_service_account_info(env_credentials)
+            if parsed:
+                service_account_info = parsed
+            else:
                 st.error("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is not valid JSON.")
 
     if not service_account_info:
