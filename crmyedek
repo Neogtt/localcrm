@@ -16,6 +16,7 @@ EMBED_IMAGES = True
 
 CURRENCY_SYMBOLS = ["USD", "$", "€", "EUR", "₺", "TL", "tl", "Tl"]
 
+ETA_COLUMNS = ["Müşteri Adı", "Proforma No", "Sevk Tarihi", "ETA Tarihi", "Açıklama"]
 
 def smart_to_num(value):
     if pd.isna(value):
@@ -57,6 +58,7 @@ USERS = {
     "export1": "Seker12345!",
     "admin": "Seker12345!",
     "Boss": "Seker12345!",
+    "Muhammed": "Seker12345!",
 }
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -546,7 +548,11 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
         try:
             df_eta = pd.read_excel(path, sheet_name="ETA")
         except Exception:
-            df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+            for col in ETA_COLUMNS:
+                if col not in df_eta.columns:
+                    df_eta[col] = ""
+            extra_cols = [col for col in df_eta.columns if col not in ETA_COLUMNS]
+            df_eta = df_eta.reindex(columns=ETA_COLUMNS + extra_cols, fill_value="")            
         try:
             df_fuar_musteri = pd.read_excel(path, sheet_name="FuarMusteri")
         except Exception:
@@ -566,11 +572,11 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
         ])
         df_evrak = pd.DataFrame(columns=[
             "Müşteri Adı", "Fatura No", "Fatura Tarihi", "Vade Tarihi", "Tutar",
-            "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
+            "Ödenen Tutar", "Commercial Invoice", "Sağlık Sertifikası", "Packing List",
             "Konşimento", "İhracat Beyannamesi", "Fatura PDF", "Sipariş Formu",
             "Yük Resimleri", "EK Belgeler"
         ])
-        df_eta = pd.DataFrame(columns=["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"])
+        df_eta = pd.DataFrame(columns=ETA_COLUMNS)        
         df_fuar_musteri = pd.DataFrame(columns=[
             "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
         ])
@@ -1020,7 +1026,7 @@ menuler = [
     ("Teklif Yönetimi", "💰"),
     ("Proforma Yönetimi", "📄"),
     ("Sipariş Operasyonları", "🚚"),
-    ("İhracat Evrakları", "📑"),
+    ("Fatura işlemleri", "📑"),
     ("Tahsilat Planı", "⏰"),
     ("ETA İzleme", "🛳️"),
     ("Fuar Kayıtları", "🎫"),
@@ -1029,8 +1035,26 @@ menuler = [
     ("Özel Gün Tebrikleri", "🎉"),
 ]
 
+ALL_MENU_NAMES = [isim for (isim, _ikon) in menuler]
+
 # 2) Tüm kullanıcılar için aynı menüler
-allowed_menus = menuler
+USER_MENU_PERMISSIONS = {
+    "export1": [name for name in ALL_MENU_NAMES if name not in {"Fatura işlemleri", "ETA İzleme"}],
+    "Muhammed": {"ETA İzleme", "Fatura işlemleri"},  
+}
+
+
+def resolve_allowed_menus(username):
+    allowed_names = USER_MENU_PERMISSIONS.get(username)
+    if not allowed_names:
+        return menuler
+
+    filtered = [item for item in menuler if item[0] in allowed_names]
+    return filtered if filtered else menuler
+
+
+# 2) Kullanıcıya göre menüleri sınırla
+allowed_menus = resolve_allowed_menus(st.session_state.user)
 
 # 3) Etiketler ve haritalar
 labels = [f"{ikon} {isim}" for (isim, ikon) in allowed_menus]
@@ -1097,6 +1121,10 @@ st.sidebar.radio(
 
 # 8) Kullanım: seçili menü adı
 menu = st.session_state.menu_state
+allowed_menu_names = {isim for (isim, _ikon) in allowed_menus}
+if menu not in allowed_menu_names:
+    menu = allowed_menus[0][0]
+    st.session_state.menu_state = menu
 
 
 # Sidebar: manuel senkron
@@ -1173,26 +1201,50 @@ if menu == "Genel Bakış":
         sevk_bekleyenler["Termin Tarihi"] = pd.to_datetime(
             sevk_bekleyenler["Termin Tarihi"], errors="coerce"
         )
+        sevk_bekleyenler["Proforma Tarihi"] = pd.to_datetime(
+            sevk_bekleyenler["Tarih"], errors="coerce"
+        )        
         sevk_bekleyenler = sevk_bekleyenler.sort_values(
             by="Termin Tarihi", ascending=True, na_position="last"
         )
-        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].dt.strftime("%d/%m/%Y")
-        sevk_bekleyenler["Termin Tarihi"] = sevk_bekleyenler["Termin Tarihi"].fillna("")
+
+        display_df = sevk_bekleyenler.copy()
+        display_df["Termin - Bugün Farkı (Gün)"] = (
+            display_df["Termin Tarihi"] - today_norm
+        ).dt.days
+        display_df["Sipariş Üzerinden Geçen Gün"] = (
+            display_df["Termin Tarihi"] - display_df["Proforma Tarihi"]
+        ).dt.days
+
+        for tarih_kolon in ["Termin Tarihi", "Proforma Tarihi"]:
+            display_df[tarih_kolon] = (
+                display_df[tarih_kolon]
+                .dt.strftime("%d/%m/%Y")
+                .fillna("")
+                .replace({"NaT": ""})
+            )
+
+        for gun_kolon in ["Termin - Bugün Farkı (Gün)", "Sipariş Üzerinden Geçen Gün"]:
+            display_df[gun_kolon] = display_df[gun_kolon].apply(
+                lambda x: "" if pd.isna(x) else int(x)
+            )
+
         st.dataframe(
-            sevk_bekleyenler[
+            display_df[
                 [
                     "Müşteri Adı",
                     "Ülke",
                     "Proforma No",
-                    "Tarih",
+                    "Proforma Tarihi",
                     "Termin Tarihi",
+                    "Termin - Bugün Farkı (Gün)",
+                    "Sipariş Üzerinden Geçen Gün",                   
                     "Tutar",
-                    "Vade (gün)",
                     "Açıklama",
                 ]
             ],
             use_container_width=True,
-        )       
+        )
 
     # ---- Yolda Olan Siparişler ----
     st.markdown("### ETA Takibindeki Siparişler")
@@ -1222,6 +1274,12 @@ if menu == "Genel Bakış":
             eta_display["ETA Tarihi"] = pd.NaT
 
         eta_display["ETA Tarihi"] = pd.to_datetime(eta_display["ETA Tarihi"], errors="coerce")
+        eta_display["Kalan Gün"] = (
+            eta_display["ETA Tarihi"] - today_norm
+        ).dt.days
+        eta_display["Kalan Gün"] = eta_display["Kalan Gün"].apply(
+            lambda x: "" if pd.isna(x) else int(x)
+        )        
         eta_display = eta_display.sort_values(
             by="ETA Tarihi",
             ascending=True,
@@ -1239,18 +1297,109 @@ if menu == "Genel Bakış":
                 "Tarih",
                 "ETA Tarihi",
                 "Tutar",
-                "Vade (gün)",
+                "Kalan Gün",
                 "Açıklama",
             ]],
             use_container_width=True,
-        )      
+        )
     # ---- Son Teslim Edilen Siparişler ----
     st.markdown("### Son Teslim Edilen 5 Sipariş")
     if "Sevk Durumu" in df_proforma.columns:
-        teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"]
+        teslim_edilenler = df_proforma[df_proforma["Sevk Durumu"] == "Ulaşıldı"].copy()
         if not teslim_edilenler.empty:
-            teslim_edilenler = teslim_edilenler.sort_values(by="Tarih", ascending=False).head(5)
-            st.dataframe(teslim_edilenler[["Müşteri Adı", "Ülke", "Proforma No", "Tarih", "Tutar", "Vade (gün)", "Açıklama"]], use_container_width=True)
+            # Ana kolonları normalize et
+            for text_col in ["Proforma No", "Müşteri Adı", "Ülke"]:
+                if text_col in teslim_edilenler.columns:
+                    teslim_edilenler[text_col] = (
+                        teslim_edilenler[text_col]
+                        .astype(str)
+                        .str.strip()
+                    )
+
+            # Tarih kolonlarını datetime'a çevir
+            date_cols = [
+                "Proforma Tarihi",
+                "Tarih",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
+            ]
+            for tarih_kolon in date_cols:
+                if tarih_kolon in teslim_edilenler.columns:
+                    teslim_edilenler[tarih_kolon] = pd.to_datetime(
+                        teslim_edilenler[tarih_kolon], errors="coerce"
+                    )
+
+            if "Proforma Tarihi" not in teslim_edilenler.columns and "Tarih" in teslim_edilenler.columns:
+                teslim_edilenler["Proforma Tarihi"] = teslim_edilenler["Tarih"]
+
+            # Son teslim edilenleri sıralayıp tekrarlayan proformaları ele
+            sort_candidates = ["Ulaşma Tarihi", "Sevk Tarihi", "Proforma Tarihi"]
+            sort_col = next(
+                (col for col in sort_candidates if col in teslim_edilenler.columns),
+                None,
+            )
+
+            if sort_col is not None:
+                teslim_edilenler = teslim_edilenler.sort_values(
+                    by=sort_col, ascending=False, na_position="last"
+                )
+
+            if "Proforma No" in teslim_edilenler.columns:
+                teslim_edilenler = teslim_edilenler.drop_duplicates(
+                    subset=["Proforma No"], keep="first"
+                )
+
+            teslim_edilenler = teslim_edilenler.head(5).reset_index(drop=True)
+
+            if {
+                "Sevk Tarihi",
+                "Proforma Tarihi",
+            }.issubset(teslim_edilenler.columns):
+                teslim_edilenler["Gün Farkı"] = (
+                    teslim_edilenler["Sevk Tarihi"]
+                    - teslim_edilenler["Proforma Tarihi"]
+                ).dt.days
+            
+            for kolon in [
+                "Proforma Tarihi",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
+            ]:
+                if kolon in teslim_edilenler.columns:
+                    teslim_edilenler[kolon] = (
+                        teslim_edilenler[kolon]
+                        .dt.strftime("%d/%m/%Y")
+                        .fillna("")
+                        .replace({"NaT": ""})
+                    )
+            if "Gün Farkı" in teslim_edilenler.columns:
+                teslim_edilenler["Gün Farkı"] = teslim_edilenler["Gün Farkı"].apply(
+                    lambda x: "" if pd.isna(x) else int(x)
+                )
+
+            display_columns = [
+                "Müşteri Adı",
+                "Ülke",
+                "Proforma No",
+                "Proforma Tarihi",
+                "Termin Tarihi",
+                "Sevk Tarihi",
+                "Ulaşma Tarihi",
+                "Gün Farkı",
+                "Tutar",
+                "Açıklama",
+            ]
+
+            mevcut_kolonlar = [
+                kolon for kolon in display_columns if kolon in teslim_edilenler.columns
+            ]
+
+            st.dataframe(
+                teslim_edilenler[mevcut_kolonlar],
+                use_container_width=True,
+            )
         else:
             st.info("Teslim edilmiş sipariş yok.")
     else:
@@ -1259,19 +1408,32 @@ if menu == "Genel Bakış":
     # ---- Vade Takibi Tablosu (HERKES GÖRÜR) ----
     st.markdown("### Vadeli Fatura ve Tahsilat Takibi")
 
-    for col in ["Vade Tarihi", "Ödendi"]:
+    for col in ["Vade Tarihi", "Ödendi", "Ödenen Tutar"]:
         if col not in invoices_df.columns:
-            invoices_df[col] = "" if col == "Vade Tarihi" else False
+            if col == "Vade Tarihi":
+                invoices_df[col] = ""
+            elif col == "Ödendi":
+                invoices_df[col] = False
+            else:
+                invoices_df[col] = 0.0
+
+    invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
+    invoices_df["Ödenen Tutar"] = pd.to_numeric(
+        invoices_df["Ödenen Tutar"], errors="coerce"
+    ).fillna(0.0)
+    kalan_serisi = (
+        invoices_df["Tutar_num"].fillna(0.0) - invoices_df["Ödenen Tutar"]
+    ).clip(lower=0.0)
 
     vade_ts = pd.to_datetime(invoices_df["Vade Tarihi"], errors="coerce")
-    od_me = ~invoices_df["Ödendi"].astype(bool)
-    vadesi_gelmemis_m = (vade_ts > today_norm) & od_me
-    vadesi_bugun_m = (vade_ts.dt.date == today_norm.date()) & od_me
-    gecikmis_m = (vade_ts < today_norm) & od_me
+    outstanding_mask = kalan_serisi > 0.01
+    vadesi_gelmemis_m = (vade_ts > today_norm) & outstanding_mask
+    vadesi_bugun_m = (vade_ts.dt.date == today_norm.date()) & outstanding_mask
+    gecikmis_m = (vade_ts < today_norm) & outstanding_mask
 
-    tg_sum = float(invoices_df.loc[vadesi_gelmemis_m, "Tutar_num"].sum())
-    tb_sum = float(invoices_df.loc[vadesi_bugun_m, "Tutar_num"].sum())
-    gec_sum = float(invoices_df.loc[gecikmis_m, "Tutar_num"].sum())
+    tg_sum = float(kalan_serisi.loc[vadesi_gelmemis_m].sum())
+    tb_sum = float(kalan_serisi.loc[vadesi_bugun_m].sum())
+    gec_sum = float(kalan_serisi.loc[gecikmis_m].sum())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Vadeleri Gelmeyen", f"{tg_sum:,.2f} USD", f"{int(vadesi_gelmemis_m.sum())} Fatura")
@@ -1283,7 +1445,9 @@ if menu == "Genel Bakış":
             invoices_df[col] = "" if col != "Ödendi" else False
     invoices_df["Ödendi"] = invoices_df["Ödendi"].fillna(False).astype(bool)
 
-    vade_df = invoices_df[invoices_df["Vade Tarihi"].notna() & (~invoices_df["Ödendi"])].copy()
+    vade_df = invoices_df[
+        invoices_df["Vade Tarihi"].notna() & outstanding_mask
+    ].copy()
     gecikmis_df = pd.DataFrame()
     if vade_df.empty:
         st.info("Açık vade kaydı yok.")
@@ -1292,11 +1456,23 @@ if menu == "Genel Bakış":
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - pd.to_datetime(datetime.date.today())).dt.days
         vade_df = vade_df.sort_values("Kalan Gün", ascending=True)
         gecikmis_df = vade_df[vade_df["Kalan Gün"] < 0].copy()
-        st.dataframe(vade_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+        vade_df_display = vade_df.copy()
+        vade_df_display["Kalan Bakiye"] = vade_df_display.index.map(kalan_serisi.get)
+        vade_df_display["Kalan Bakiye"] = vade_df_display["Kalan Bakiye"].fillna(0.0).map(lambda x: f"{x:,.2f} USD")
+        st.dataframe(
+            vade_df_display[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün", "Kalan Bakiye"]],
+            use_container_width=True,
+        )
 
     st.markdown("#### Gecikmiş Ödemeler")
     if not gecikmis_df.empty:
-        st.dataframe(gecikmis_df[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün"]], use_container_width=True)
+        gecikmis_display = gecikmis_df.copy()
+        gecikmis_display["Kalan Bakiye"] = gecikmis_display.index.map(kalan_serisi.get)
+        gecikmis_display["Kalan Bakiye"] = gecikmis_display["Kalan Bakiye"].fillna(0.0).map(lambda x: f"{x:,.2f} USD")
+        st.dataframe(
+            gecikmis_display[["Müşteri Adı", "Ülke", "Fatura No", "Vade Tarihi", "Tutar", "Kalan Gün", "Kalan Bakiye"]],
+            use_container_width=True,
+        )
     else:
         st.info("Gecikmiş ödeme bulunmuyor.")
     st.markdown("### Satış Analitiği Özeti")
@@ -2798,17 +2974,20 @@ elif menu == "Sipariş Operasyonları":
         # Proforma'dan bilgiler
         row = df_proforma.loc[df_proforma["ID"] == sec_id_sevk].iloc[0]
         # ETA kolon güvenliği
-        for col in ["Müşteri Adı","Proforma No","ETA Tarihi","Açıklama"]:
+        for col in ETA_COLUMNS:        
             if col not in df_eta.columns:
                 df_eta[col] = ""
         # ETA'ya ekle (varsa güncelleme)
         filt = (df_eta["Müşteri Adı"] == row["Müşteri Adı"]) & (df_eta["Proforma No"] == row["Proforma No"])
         if filt.any():
+            df_eta.loc[filt, "Sevk Tarihi"] = row.get("Sevk Tarihi", "")           
             df_eta.loc[filt, "Açıklama"] = row.get("Açıklama","")
         else:
+            sevk_tarih = row.get("Sevk Tarihi", "")            
             df_eta = pd.concat([df_eta, pd.DataFrame([{
                 "Müşteri Adı": row["Müşteri Adı"],
                 "Proforma No": row["Proforma No"],
+                "Sevk Tarihi": sevk_tarih,               
                 "ETA Tarihi": "",
                 "Açıklama": row.get("Açıklama","")
             }])], ignore_index=True)
@@ -2854,13 +3033,13 @@ elif menu == "Sipariş Operasyonları":
 ### --- İHRACAT EVRAKLARI MENÜSÜ ---
 ### ===========================
 
-elif menu == "İhracat Evrakları":
+elif menu == "Fatura işlemleri":
 
-    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>İhracat Evrakları</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Fatura işlemleri</h2>", unsafe_allow_html=True)
 
     # ---- Sütun güvenliği + benzersiz ID ----
     gerekli_kolonlar = [
-        "ID","Müşteri Adı","Proforma No","Fatura No","Fatura Tarihi","Tutar",
+        "ID","Müşteri Adı","Proforma No","Fatura No","Fatura Tarihi","Tutar","Ödenen Tutar",
         "Vade (gün)","Vade Tarihi","Ülke","Satış Temsilcisi","Ödeme Şekli",
         "Commercial Invoice","Sağlık Sertifikası","Packing List","Konşimento",
         "İhracat Beyannamesi","Fatura PDF","Sipariş Formu","Yük Resimleri",
@@ -2868,25 +3047,176 @@ elif menu == "İhracat Evrakları":
     ]
     for c in gerekli_kolonlar:
         if c not in df_evrak.columns:
-            df_evrak[c] = False if c == "Ödendi" else ""
+            if c == "Ödendi":
+                df_evrak[c] = False
+            elif c == "Ödenen Tutar":
+                df_evrak[c] = 0.0
+            else:
+                df_evrak[c] = ""
 
     bos_id_mask = df_evrak["ID"].astype(str).str.strip().isin(["","nan"])
     if bos_id_mask.any():
         df_evrak.loc[bos_id_mask, "ID"] = [str(uuid.uuid4()) for _ in range(bos_id_mask.sum())]
         update_excel()
 
+        # ---- Otomatik seçim için session state anahtarları ----
+    musteri_key = "invoice_customer_select"
+    proforma_key = "invoice_proforma_select"
+    pending_select_key = "pending_invoice_select"
+    pending_reset_flag_key = "pending_invoice_select_reset"
+    st.session_state.setdefault(musteri_key, "")
+    st.session_state.setdefault(proforma_key, "")
+    st.session_state.setdefault("invoice_last_customer", "")
+    st.session_state.setdefault(pending_select_key, "")
+    st.session_state.setdefault(pending_reset_flag_key, False)
+
+    if "Sevk Durumu" not in df_proforma.columns:
+        df_proforma["Sevk Durumu"] = ""
+    if "Durum" not in df_proforma.columns:
+        df_proforma["Durum"] = ""
+
+    # ---- Sevk edilmiş fakat faturası kesilmemiş siparişler ----
+    st.markdown("### Faturası Kesilmemiş Sevkli Siparişler")
+    sevkedilen_mask = df_proforma["Sevk Durumu"] == "Sevkedildi"
+    if "Durum" in df_proforma.columns:
+        sevkedilen_mask &= df_proforma["Durum"].astype(str).str.strip().eq("Siparişe Dönüştü")
+    pending_orders = df_proforma[sevkedilen_mask].copy()
+
+    if not pending_orders.empty:
+        pending_orders["Termin Tarihi Sıra"] = pd.to_datetime(
+            pending_orders.get("Termin Tarihi"), errors="coerce"
+        )
+        pending_orders["Tarih Sıra"] = pd.to_datetime(
+            pending_orders.get("Tarih"), errors="coerce"
+        )
+        pending_orders = pending_orders.sort_values(
+            ["Termin Tarihi Sıra", "Tarih Sıra"], ascending=[True, True]
+        )
+
+    if not pending_orders.empty:
+        pending_orders["ID"] = pending_orders["ID"].astype(str)
+        pending_orders["Müşteri Adı"] = pending_orders["Müşteri Adı"].astype(str)
+        pending_orders["Proforma No"] = pending_orders["Proforma No"].astype(str)
+
+        pending_orders = pending_orders[
+            pending_orders["ID"].str.strip() != ""
+        ]
+
+        if not df_evrak.empty:
+            invoice_pairs = set(
+                (
+                    str(m).strip().lower(),
+                    str(p).strip().lower(),
+                )
+                for m, p in zip(df_evrak.get("Müşteri Adı", []), df_evrak.get("Proforma No", []))
+                if str(m).strip() or str(p).strip()
+            )
+            pending_orders = pending_orders[
+                ~pending_orders.apply(
+                    lambda r: (
+                        str(r.get("Müşteri Adı", "")).strip().lower(),
+                        str(r.get("Proforma No", "")).strip().lower(),
+                    )
+                    in invoice_pairs,
+                    axis=1,
+                )
+            ]
+
+        pending_orders = pending_orders[
+            pending_orders["Proforma No"].astype(str).str.strip() != ""
+        ]
+
+    if pending_orders.empty:
+        st.info("Sevk edilip henüz faturası kaydedilmemiş sipariş bulunmuyor.")
+    else:
+        display_cols = [
+            "ID",
+            "Müşteri Adı",
+            "Proforma No",
+            "Termin Tarihi",
+            "Tutar",
+            "Açıklama",
+        ]
+        for col in display_cols:
+            if col not in pending_orders.columns:
+                pending_orders[col] = ""
+        table = pending_orders[display_cols].copy()
+        table["Termin Tarihi"] = pd.to_datetime(table["Termin Tarihi"], errors="coerce").dt.strftime("%d/%m/%Y")
+        table["Tutar"] = table["Tutar"].apply(lambda x: f"{smart_to_num(x):,.2f} USD" if str(x).strip() else "")
+        st.dataframe(table.drop(columns=["ID"]), use_container_width=True)
+
+        option_labels = {"": "— Sipariş Seç —"}
+        for _, row in pending_orders.iterrows():
+            label = f"{row['Müşteri Adı']} - {row['Proforma No']}"
+            termin_dt = pd.to_datetime(row.get("Termin Tarihi", ""), errors="coerce")
+            if pd.notnull(termin_dt):
+                label += f" | Termin: {termin_dt.strftime('%d/%m/%Y')}"
+            tutar_raw = row.get("Tutar", "")
+            if str(tutar_raw).strip():
+                label += f" | Tutar: {smart_to_num(tutar_raw):,.2f} USD"
+            option_labels[row["ID"]] = label
+
+        pending_options = [""] + pending_orders["ID"].tolist()
+        if st.session_state.get(pending_reset_flag_key):
+            st.session_state[pending_select_key] = ""
+            st.session_state[pending_reset_flag_key] = False
+
+        if st.session_state[pending_select_key] not in pending_options:
+            st.session_state[pending_select_key] = ""
+
+        selected_pending = st.selectbox(
+            "Fatura kaydı açmak istediğiniz siparişi seçin",
+            options=pending_options,
+            key=pending_select_key,
+            format_func=lambda oid: option_labels.get(oid, "— Sipariş Seç —"),
+        )
+
+        if st.button("Seçimi Fatura Formuna Aktar", disabled=(selected_pending == "")):
+            row = pending_orders[pending_orders["ID"] == selected_pending]
+            if not row.empty:
+                hedef = row.iloc[0]
+                st.session_state[musteri_key] = str(hedef.get("Müşteri Adı", ""))
+                st.session_state[proforma_key] = str(hedef.get("Proforma No", ""))
+                st.session_state[pending_reset_flag_key] = True
+                st.rerun()
+  
     # ---- Müşteri / Proforma seçimleri ----
+    st.markdown("### Fatura Ekle")
+ 
     musteri_secenek = sorted(df_proforma["Müşteri Adı"].dropna().astype(str).unique().tolist())
-    secilen_musteri = st.selectbox("Müşteri Seç", [""] + musteri_secenek)
+    musteri_options = [""] + musteri_secenek
+    if st.session_state[musteri_key] not in musteri_options:
+        st.session_state[musteri_key] = ""
+    secilen_musteri = st.selectbox("Müşteri Seç", musteri_options, key=musteri_key)
+
+    if st.session_state.get("invoice_last_customer") != secilen_musteri:
+        st.session_state["invoice_last_customer"] = secilen_musteri
+        st.session_state[proforma_key] = ""
 
     if secilen_musteri:
-        p_list = df_proforma.loc[df_proforma["Müşteri Adı"] == secilen_musteri, "Proforma No"].dropna().astype(str).unique().tolist()
-        proforma_no_sec = st.selectbox("Proforma No Seç", [""] + sorted(p_list))
+        p_list = (
+            df_proforma.loc[
+                df_proforma["Müşteri Adı"].astype(str) == secilen_musteri,
+                "Proforma No",
+            ]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+        proforma_options = [""] + sorted(p_list)
     else:
-        proforma_no_sec = ""
+        proforma_options = [""]
+
+    if st.session_state[proforma_key] not in proforma_options:
+        st.session_state[proforma_key] = ""
+
+    proforma_no_sec = st.selectbox("Proforma No Seç", proforma_options, key=proforma_key)
 
     # ---- Müşteri varsayılanları (ülke/temsilci/ödeme) ----
-    musteri_info = df_musteri[df_musteri["Müşteri Adı"] == secilen_musteri]
+    musteri_info = df_musteri[
+        df_musteri["Müşteri Adı"].astype(str) == secilen_musteri
+    ]
     ulke = musteri_info["Ülke"].values[0] if not musteri_info.empty else ""
     temsilci = musteri_info["Satış Temsilcisi"].values[0] if not musteri_info.empty else ""
     odeme = musteri_info["Ödeme Şekli"].values[0] if not musteri_info.empty else ""
@@ -2894,12 +3224,18 @@ elif menu == "İhracat Evrakları":
     # ---- Proforma'dan Vade (gün) çek ve Vade Tarihi hesapla ----
     vade_gun = ""
     if secilen_musteri and proforma_no_sec:
-        pr = df_proforma[(df_proforma["Müşteri Adı"] == secilen_musteri) & (df_proforma["Proforma No"] == proforma_no_sec)]
+        pr = df_proforma[
+            (df_proforma["Müşteri Adı"].astype(str) == secilen_musteri)
+            & (df_proforma["Proforma No"].astype(str) == proforma_no_sec)
+        ]
         if not pr.empty:
             vade_gun = pr.iloc[0].get("Vade (gün)", "")
 
     # ---- Eski evrak linkleri (aynı müşteri+proforma altında son satır) ----
-    onceki_evrak = df_evrak[(df_evrak["Müşteri Adı"] == secilen_musteri) & (df_evrak["Proforma No"] == proforma_no_sec)].tail(1)
+    onceki_evrak = df_evrak[
+        (df_evrak["Müşteri Adı"].astype(str) == secilen_musteri)
+        & (df_evrak["Proforma No"].astype(str) == proforma_no_sec)
+    ].tail(1)
 
     def file_link_html(label, url):
         return f'<div style="margin-top:-6px;"><a href="{url}" target="_blank" style="color:#219A41;">[Daha önce yüklenmiş {label}]</a></div>' if url else \
@@ -2977,9 +3313,9 @@ elif menu == "İhracat Evrakları":
 
         # 2) Tekilleştirme: aynı (Müşteri, Proforma, Fatura No) varsa GÜNCELLE; yoksa EKLE
         key_mask = (
-            (df_evrak["Müşteri Adı"] == secilen_musteri) &
-            (df_evrak["Proforma No"] == proforma_no_sec) &
-            (df_evrak["Fatura No"] == fatura_no)
+            (df_evrak["Müşteri Adı"].astype(str) == secilen_musteri) &
+            (df_evrak["Proforma No"].astype(str) == proforma_no_sec) &
+            (df_evrak["Fatura No"].astype(str) == fatura_no)
         )
 
         # Vade Tarihi yazımı
@@ -2995,6 +3331,13 @@ elif menu == "İhracat Evrakları":
             df_evrak.at[idx, "Ülke"]             = ulke
             df_evrak.at[idx, "Satış Temsilcisi"] = temsilci
             df_evrak.at[idx, "Ödeme Şekli"]      = odeme
+            mevcut_odeme = pd.to_numeric(
+                pd.Series(df_evrak.at[idx, "Ödenen Tutar"]), errors="coerce"
+            ).fillna(0.0).iloc[0]
+            tutar_float = float(tutar_num) if pd.notnull(tutar_num) else 0.0
+            df_evrak.at[idx, "Ödenen Tutar"] = min(max(mevcut_odeme, 0.0), tutar_float)
+            if tutar_float > 0 and df_evrak.at[idx, "Ödenen Tutar"] >= tutar_float - 0.01:
+                df_evrak.at[idx, "Ödendi"] = True   
             for col, _ in evrak_tipleri:
                 df_evrak.at[idx, col] = file_urls.get(col, "")
             islem = "güncellendi"
@@ -3012,6 +3355,7 @@ elif menu == "İhracat Evrakları":
                 "Ülke": ulke,
                 "Satış Temsilcisi": temsilci,
                 "Ödeme Şekli": odeme,
+                "Ödenen Tutar": 0.0,       
                 "Ödendi": False,
                 **{col: file_urls.get(col, "") for col, _ in evrak_tipleri},
                 "Sipariş Formu": "",
@@ -3023,11 +3367,171 @@ elif menu == "İhracat Evrakları":
         if "Tutar_num" not in df_evrak.columns:
             df_evrak["Tutar_num"] = pd.NA
         df_evrak["Tutar_num"] = pd.to_numeric(df_evrak["Tutar_num"], errors="coerce")
-
+        if "Ödenen Tutar" not in df_evrak.columns:
+            df_evrak["Ödenen Tutar"] = 0.0
+        df_evrak["Ödenen Tutar"] = pd.to_numeric(df_evrak["Ödenen Tutar"], errors="coerce").fillna(0.0)
+        df_evrak["Ödenen Tutar"] = df_evrak["Ödenen Tutar"].clip(lower=0)
+        df_evrak["Ödenen Tutar"] = np.minimum(
+            df_evrak["Ödenen Tutar"],
+            df_evrak["Tutar_num"].fillna(np.inf)
+        )
 
         update_excel()
         st.success(f"Evrak {islem}!")
         st.rerun()
+
+    st.markdown("### Kayıtlı Fatura Güncelle")
+
+    invoice_mask = df_evrak["Fatura No"].astype(str).str.strip() != ""
+    existing_invoices = df_evrak[invoice_mask].copy()
+
+    if existing_invoices.empty:
+        st.info("Güncellenebilecek kayıtlı fatura bulunmuyor.")
+    else:
+        def _safe_date(value, fallback=None):
+            if isinstance(value, datetime.datetime):
+                return value.date()
+            if isinstance(value, datetime.date):
+                return value
+            try:
+                ts = pd.to_datetime(value, errors="coerce")
+            except Exception:
+                ts = pd.NaT
+            if pd.isna(ts):
+                return fallback
+            return ts.date()
+
+        def _format_invoice(idx):
+            row = existing_invoices.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma = str(row.get("Proforma No", "")).strip()
+            invoice_date = _safe_date(row.get("Fatura Tarihi"))
+            due_date = _safe_date(row.get("Vade Tarihi"))
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma:
+                parts.append(f"Proforma: {proforma}")
+            if invoice_date:
+                parts.append(f"Fatura Tarihi: {invoice_date.strftime('%d/%m/%Y')}")
+            if due_date:
+                parts.append(f"Vade Tarihi: {due_date.strftime('%d/%m/%Y')}")
+            return " | ".join(parts)
+
+        invoice_indices = existing_invoices.index.tolist()
+        selected_invoice = st.selectbox(
+            "Güncellemek istediğiniz faturayı seçin",
+            options=invoice_indices,
+            format_func=_format_invoice,
+            key="invoice_edit_select",
+        )
+
+        if invoice_indices:
+            secili_satir = existing_invoices.loc[selected_invoice]
+            default_invoice_date = _safe_date(secili_satir.get("Fatura Tarihi"), fallback=datetime.date.today())
+            default_due_date = _safe_date(secili_satir.get("Vade Tarihi"), fallback=default_invoice_date)
+
+            mevcut_tutar = secili_satir.get("Tutar", "")
+            if pd.isna(mevcut_tutar):
+                mevcut_tutar = ""
+            else:
+                mevcut_tutar = str(mevcut_tutar)
+
+            with st.form("update_invoice_details"):
+                yeni_fatura_tarihi = st.date_input("Yeni Fatura Tarihi", value=default_invoice_date)
+                yeni_vade_tarihi = st.date_input("Yeni Vade Tarihi", value=default_due_date)
+                yeni_tutar = st.text_input("Yeni Fatura Tutarı (USD)", value=mevcut_tutar)
+                update_submitted = st.form_submit_button("Bilgileri Güncelle")
+
+            if update_submitted:
+                df_evrak.at[selected_invoice, "Fatura Tarihi"] = yeni_fatura_tarihi
+                df_evrak.at[selected_invoice, "Vade Tarihi"] = yeni_vade_tarihi
+                df_evrak.at[selected_invoice, "Tutar"] = yeni_tutar
+
+                yeni_tutar_num = smart_to_num(yeni_tutar)
+                df_evrak.at[selected_invoice, "Tutar_num"] = yeni_tutar_num
+                
+                try:
+                    gun_farki = (pd.Timestamp(yeni_vade_tarihi) - pd.Timestamp(yeni_fatura_tarihi)).days
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = str(gun_farki)
+                except Exception:
+                    df_evrak.at[selected_invoice, "Vade (gün)"] = ""
+
+
+                if "Ödenen Tutar" in df_evrak.columns:
+                    mevcut_odeme = pd.to_numeric(
+                        pd.Series(df_evrak.at[selected_invoice, "Ödenen Tutar"]), errors="coerce"
+                    ).fillna(0.0).iloc[0]
+                    tutar_float = float(yeni_tutar_num) if pd.notnull(yeni_tutar_num) else 0.0
+                    guncel_odeme = min(max(mevcut_odeme, 0.0), tutar_float)
+                    df_evrak.at[selected_invoice, "Ödenen Tutar"] = guncel_odeme
+
+                    if "Ödendi" in df_evrak.columns:
+                        if tutar_float > 0:
+                            df_evrak.at[selected_invoice, "Ödendi"] = guncel_odeme >= tutar_float - 0.01
+                        else:
+                            df_evrak.at[selected_invoice, "Ödendi"] = False
+                elif "Ödendi" in df_evrak.columns:
+                    df_evrak.at[selected_invoice, "Ödendi"] = False
+                    
+                update_excel()
+                st.success("Fatura bilgileri güncellendi!")
+                st.rerun()
+
+    st.markdown("### Fatura Kaydı Sil")
+
+    if df_evrak.empty:
+        st.info("Silinecek fatura kaydı bulunmuyor.")
+    else:
+        delete_options = df_evrak.index.tolist()
+
+        def _format_delete_option(idx):
+            row = df_evrak.loc[idx]
+            musteri = str(row.get("Müşteri Adı", "")).strip() or "Müşteri Yok"
+            fatura_no = str(row.get("Fatura No", "")).strip() or "Numara Yok"
+            proforma_no = str(row.get("Proforma No", "")).strip()
+
+            invoice_date = row.get("Fatura Tarihi", "")
+            invoice_date_str = ""
+            if pd.notna(invoice_date):
+                invoice_ts = pd.to_datetime(invoice_date, errors="coerce")
+                if pd.notna(invoice_ts):
+                    invoice_date_str = invoice_ts.strftime("%d/%m/%Y")
+
+            tutar_raw = row.get("Tutar", "")
+            tutar_str = ""
+            if str(tutar_raw).strip():
+                tutar_str = f"{smart_to_num(tutar_raw):,.2f} USD"
+
+            parts = [f"{musteri}", f"Fatura: {fatura_no}"]
+            if proforma_no:
+                parts.append(f"Proforma: {proforma_no}")
+            if invoice_date_str:
+                parts.append(f"Tarih: {invoice_date_str}")
+            if tutar_str:
+                parts.append(f"Tutar: {tutar_str}")
+            return " | ".join(parts)
+
+        with st.form("delete_invoice_form"):
+            silinecek_fatura = st.selectbox(
+                "Silmek istediğiniz faturayı seçin",
+                options=delete_options,
+                format_func=_format_delete_option,
+                key="invoice_delete_select",
+            )
+            confirm_delete = st.checkbox("Silme işlemini onaylıyorum")
+            delete_submitted = st.form_submit_button("Seçili Faturayı Sil")
+
+        if delete_submitted:
+            if confirm_delete:
+                df_evrak = df_evrak.drop(index=silinecek_fatura).reset_index(drop=True)
+                update_excel()
+                st.success("Seçilen fatura kaydı silindi.")
+                st.rerun()
+            else:
+                st.warning("Silme işlemini onaylamak için kutucuğu işaretleyin.")
+
+    
 
 
 ### ===========================
@@ -3038,14 +3542,22 @@ elif menu == "Tahsilat Planı":
     st.markdown("<h2 style='color:#219A41; font-weight:bold;'>Tahsilat Planı</h2>", unsafe_allow_html=True)
 
     # Gerekli kolonlar yoksa ekle
-    for c in ["Müşteri Adı","Fatura No","Vade Tarihi","Tutar_num","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
+    for c in ["Müşteri Adı","Fatura No","Fatura Tarihi","Vade Tarihi","Tutar_num","Ödenen Tutar","Ülke","Satış Temsilcisi","Ödeme Şekli","Ödendi"]:
         if c not in df_evrak.columns:
-            df_evrak[c] = "" if c != "Ödendi" else False
+            if c == "Ödendi":
+                df_evrak[c] = False
+            elif c == "Ödenen Tutar" or c == "Tutar_num":
+                df_evrak[c] = 0.0
+            else:
+                df_evrak[c] = ""
 
     # Sadece vadesi olan kayıtlar
     vade_df = df_evrak.copy()
+    vade_df["Tutar_num"] = pd.to_numeric(vade_df["Tutar_num"], errors="coerce").fillna(0.0)
+    vade_df["Ödenen Tutar"] = pd.to_numeric(vade_df["Ödenen Tutar"], errors="coerce").fillna(0.0)    
     vade_df["Vade Tarihi"] = pd.to_datetime(vade_df["Vade Tarihi"], errors="coerce")
     vade_df = vade_df[vade_df["Vade Tarihi"].notna()]
+    vade_df["Kalan Bakiye"] = (vade_df["Tutar_num"] - vade_df["Ödenen Tutar"]).clip(lower=0.0)    
 
     if vade_df.empty:
         st.info("Vade tarihi girilmiş kayıt bulunmuyor.")
@@ -3054,15 +3566,16 @@ elif menu == "Tahsilat Planı":
         vade_df["Kalan Gün"] = (vade_df["Vade Tarihi"] - today).dt.days
 
         # Ödenmemişler üzerinden özet kutucukları
-        acik = vade_df[~vade_df["Ödendi"]].copy()
+        acik_mask = vade_df["Kalan Bakiye"] > 0.01
+        acik = vade_df[acik_mask].copy()
         vadesi_gelmemis = acik[acik["Kalan Gün"] > 0]
         bugun = acik[acik["Kalan Gün"] == 0]
         gecikmis = acik[acik["Kalan Gün"] < 0]
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Tutar_num'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
-        c2.metric("Bugün Vadesi",   f"{float(bugun['Tutar_num'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
-        c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Tutar_num'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
+        c1.metric("Vadeleri Gelmeyen", f"{float(vadesi_gelmemis['Kalan Bakiye'].sum()):,.2f} USD", f"{len(vadesi_gelmemis)} Fatura")
+        c2.metric("Bugün Vadesi",   f"{float(bugun['Kalan Bakiye'].sum()):,.2f} USD", f"{len(bugun)} Fatura")
+        c3.metric("Gecikmiş Ödemeler",        f"{float(gecikmis['Kalan Bakiye'].sum()):,.2f} USD", f"{len(gecikmis)} Fatura")
 
         st.markdown("---")
 
@@ -3078,15 +3591,21 @@ elif menu == "Tahsilat Planı":
         if tem_f:
             view = view[view["Satış Temsilcisi"].isin(tem_f)]
         if durum_f == "Ödenmemiş (varsayılan)":
-            view = view[~view["Ödendi"]]
+            view = view[view["Kalan Bakiye"] > 0.01]
         elif durum_f == "Sadece Ödenmiş":
-            view = view[view["Ödendi"]]
+            view = view[view["Kalan Bakiye"] <= 0.01]
 
         # Görüntü tablosu (görsel kopya)
         show = view.copy()
         show["Vade Tarihi"] = pd.to_datetime(show["Vade Tarihi"]).dt.strftime("%d/%m/%Y")
+        if "Fatura Tarihi" in show.columns:
+            show["Fatura Tarihi"] = pd.to_datetime(show["Fatura Tarihi"]).dt.strftime("%d/%m/%Y")
+        show["Ödenen Tutar"] = pd.to_numeric(show["Ödenen Tutar"], errors="coerce").fillna(0.0)
+        show["Kalan Bakiye"] = (show["Tutar_num"].fillna(0.0) - show["Ödenen Tutar"]).clip(lower=0.0)  
         show["Tutar"] = show["Tutar_num"].map(lambda x: f"{float(x):,.2f} USD")
-        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Vade Tarihi","Kalan Gün","Tutar","Ödendi"]
+        show["Ödenen Tutar"] = show["Ödenen Tutar"].map(lambda x: f"{float(x):,.2f} USD")
+        show["Kalan Bakiye"] = show["Kalan Bakiye"].map(lambda x: f"{float(x):,.2f} USD")
+        cols = ["Müşteri Adı","Ülke","Satış Temsilcisi","Fatura No","Fatura Tarihi","Vade Tarihi","Kalan Gün","Tutar","Ödenen Tutar","Kalan Bakiye","Ödendi"]
         cols = [c for c in cols if c in show.columns]
         st.dataframe(show[cols].sort_values(["Kalan Gün","Vade Tarihi"]), use_container_width=True)
 
@@ -3100,16 +3619,55 @@ elif menu == "Tahsilat Planı":
                 format_func=lambda i: f"{view.loc[view['_row']==i,'Müşteri Adı'].values[0]} | {view.loc[view['_row']==i,'Fatura No'].values[0]}"
             )
 
-            # Seçilen satırın mevcut ödeme durumunu checkbox'ta varsayılan değer olarak göster
-            mevcut_odendi = bool(view.loc[view["_row"] == sec, "Ödendi"].iloc[0])
-            odendi_mi = st.checkbox("Ödendi olarak işaretle", value=mevcut_odendi)
-            if st.button("Kaydet / Güncelle"):
-                # Ana df_evrak’taki satıra yaz
-                # _row önceki index, aynı sırayı df_evrak’ta güncellemek için kullanıyoruz
-                ana_index = view.loc[view["_row"] == sec, "_row"].values[0]
+            secili = view.loc[view["_row"] == sec].iloc[0]
+            toplam_tutar = float(secili.get("Tutar_num", 0.0) or 0.0)
+            odenen_tutar = float(pd.to_numeric(pd.Series(secili.get("Ödenen Tutar", 0.0)), errors="coerce").fillna(0.0).iloc[0])
+            if odenen_tutar < 0:
+                odenen_tutar = 0.0
+            kalan_bakiye = max(toplam_tutar - odenen_tutar, 0.0)
+
+            ozet_cols = st.columns(3)
+            ozet_cols[0].metric("Fatura Tutarı", f"{toplam_tutar:,.2f} USD")
+            ozet_cols[1].metric("Ödenen Tutar", f"{odenen_tutar:,.2f} USD")
+            ozet_cols[2].metric("Kalan Bakiye", f"{kalan_bakiye:,.2f} USD")
+
+            min_ara_odeme = -odenen_tutar
+            max_ara_odeme = max(toplam_tutar - odenen_tutar, 0.0)
+
+            with st.form(f"tahsilat_guncelle_{sec}"):
+                mevcut_odendi = bool(secili.get("Ödendi", False))
+                ara_odeme = st.number_input(
+                    "Ara ödeme tutarı (USD)",
+                    min_value=float(min_ara_odeme),
+                    max_value=float(max_ara_odeme),
+                    value=0.0,
+                    step=100.0,
+                    format="%.2f",
+                    key=f"ara_odeme_input_{sec}"
+                )
+                st.caption("Not: Gerekirse eksi tutar girerek önceki tahsilatı azaltabilirsiniz.")
+                odendi_mi = st.checkbox(
+                    "Ödendi olarak işaretle",
+                    value=mevcut_odendi,
+                    key=f"odendi_checkbox_{sec}"
+                )
+                kaydet = st.form_submit_button("Kaydet / Güncelle")
+
+            if kaydet:
+                ana_index = int(view.loc[view["_row"] == sec, "_row"].iloc[0])
+                yeni_odenen = odenen_tutar + float(ara_odeme)
+                yeni_odenen = max(min(yeni_odenen, toplam_tutar), 0.0)
+                if toplam_tutar <= 0:
+                    yeni_odenen = 0.0
+                if odendi_mi or yeni_odenen >= max(toplam_tutar - 0.01, 0):
+                    yeni_odenen = toplam_tutar
+                    odendi_mi = True
+                else:
+                    odendi_mi = yeni_odenen >= max(toplam_tutar - 0.01, 0)
+                df_evrak.at[ana_index, "Ödenen Tutar"] = round(yeni_odenen, 2)
                 df_evrak.at[ana_index, "Ödendi"] = bool(odendi_mi)
                 update_excel()
-                st.success("Ödeme durumu güncellendi!")
+                st.success("Tahsilat bilgisi güncellendi!")
                 st.rerun()
 
 ### ===========================
@@ -3126,10 +3684,12 @@ elif menu == "ETA İzleme":
     for col in ["Sevk Durumu", "Proforma No", "Sevk Tarihi", "Ulaşma Tarihi"]:
         if col not in df_proforma.columns:
             df_proforma[col] = ""
-
-    for col in ["Müşteri Adı", "Proforma No", "ETA Tarihi", "Açıklama"]:
+            
+    for col in ETA_COLUMNS:            
         if col not in df_eta.columns:
             df_eta[col] = ""
+    extra_eta_cols = [col for col in df_eta.columns if col not in ETA_COLUMNS]
+    df_eta = df_eta.reindex(columns=ETA_COLUMNS + extra_eta_cols, fill_value="")            
 
     # ---- Yardımcılar ----
     def safe_name(text, maxlen=120):
@@ -3168,8 +3728,9 @@ elif menu == "ETA İzleme":
         """
         Klasör adı için kullanılacak tarihi belirler:
         1) Proforma 'Sevk Tarihi' varsa o,
-        2) yoksa ilgili ETA kaydındaki 'ETA Tarihi',
-        3) o da yoksa bugün.
+        2) yoksa ETA kaydındaki 'Sevk Tarihi',
+        3) yoksa ilgili ETA kaydındaki 'ETA Tarihi',
+        4) o da yoksa bugün.
         """
         # Sevk Tarihi
         pr_mask = (df_proforma["Müşteri Adı"] == musteri) & (df_proforma["Proforma No"] == proforma_no)
@@ -3185,8 +3746,21 @@ elif menu == "ETA İzleme":
             except Exception:
                 pass
 
-        # ETA Tarihi
+        # ETA Sevk Tarihi
         eta_mask = (df_eta["Müşteri Adı"] == musteri) & (df_eta["Proforma No"] == proforma_no)
+        eta_sevk_ts = None
+        if eta_mask.any():
+            try:
+                eta_sevk_ts = pd.to_datetime(df_eta.loc[eta_mask, "Sevk Tarihi"].values[0], errors="coerce")
+            except Exception:
+                eta_sevk_ts = None
+        if pd.notnull(eta_sevk_ts):
+            try:
+                return eta_sevk_ts.date()
+            except Exception:
+                pass
+
+        # ETA Tarihi        
         eta_ts = None
         if eta_mask.any():
             try:
@@ -3202,13 +3776,20 @@ elif menu == "ETA İzleme":
         # Default: bugün
         return datetime.date.today()
 
-    def get_loading_photos_folder(musteri_adi: str, tarih: datetime.date) -> str:
+    def get_loading_photos_folder(musteri_adi: str, proforma_no: str, fallback_date: datetime.date) -> str:
         """
-        Ana klasör altında <Müşteri_Adi>_<YYYY-MM-DD> / Yükleme Resimleri hiyerarşisini hazırlar ve döndürür.
+        Ana klasör altında <Müşteri_Adi>_<Proforma_No> / Yükleme Resimleri hiyerarşisini hazırlar ve döndürür.
+        Proforma numarası yoksa tarih tabanlı bir isimlendirmeye geri döner.
         """
         if not ROOT_EXPORT_FOLDER_ID:
             return ""
-        folder_name = f"{safe_name(musteri_adi)}_{tarih.strftime('%Y-%m-%d')}"
+  
+        musteri_parca = safe_name(musteri_adi)
+        proforma_parca = safe_name(proforma_no)
+        if not proforma_parca:
+            proforma_parca = fallback_date.strftime('%Y-%m-%d')
+
+        folder_name = f"{musteri_parca}_{proforma_parca}" if musteri_parca else proforma_parca
         parent = get_or_create_folder_by_name(folder_name, ROOT_EXPORT_FOLDER_ID)
         if not parent:
             return ""
@@ -3228,13 +3809,18 @@ elif menu == "ETA İzleme":
         sec_musteri = selected_row["Müşteri Adı"]
         sec_proforma = selected_row["Proforma No"]
 
-        # === Klasör tarihi (Sevk/ETA/bugün) + Müşteri adı ===
+        # === Klasör bilgisi (Sevk/ETA/bugün) + Müşteri adı ===
         klasor_tarih = resolve_folder_date(sec_musteri, sec_proforma)
+        proforma_gosterim = ""
+        if pd.notna(sec_proforma):
+            proforma_gosterim = str(sec_proforma).strip()
+        if not proforma_gosterim:
+            proforma_gosterim = klasor_tarih.strftime('%Y-%m-%d')
+            
+        # ========== YÜKLEME FOTOĞRAFLARI (Müşteri_Adi + Proforma → “Yükleme Resimleri”) ==========
+        st.markdown("#### Yükleme Fotoğrafları (Müşteri + Proforma bazlı)")
 
-        # ========== YÜKLEME FOTOĞRAFLARI (Müşteri_Adi + Tarih → “Yükleme Resimleri”) ==========
-        st.markdown("#### Yükleme Fotoğrafları (Müşteri + Tarih bazlı)")
-
-        hedef_klasor = get_loading_photos_folder(sec_musteri, klasor_tarih)
+        hedef_klasor = get_loading_photos_folder(sec_musteri, sec_proforma, klasor_tarih)
         if not hedef_klasor:
             st.error("Klasör hiyerarşisi oluşturulamadı.")
         else:
@@ -3243,7 +3829,7 @@ elif menu == "ETA İzleme":
             st.markdown(f"[Klasörü yeni sekmede aç]({drive_link})")
 
             # 2) Panel içinde gömülü görüntüleme – sadece gezinme
-            with st.expander(f"Panelde klasörü görüntüle – {sec_musteri} / {klasor_tarih.strftime('%Y-%m-%d')}"):
+            with st.expander(f"Panelde klasörü görüntüle – {sec_musteri} / {proforma_gosterim}"):
                 embed = f"https://drive.google.com/embeddedfolderview?id={hedef_klasor}#grid"
                 st.markdown(
                     f'<iframe src="{embed}" width="100%" height="520" frameborder="0" '
@@ -3273,7 +3859,7 @@ elif menu == "ETA İzleme":
                     "Yüklenecek dosyaları seçin",
                     type=["pdf", "jpg", "jpeg", "png", "webp"],
                     accept_multiple_files=True,
-                    key=f"yuk_resimleri_dedupe_{sec_musteri}_{klasor_tarih}"
+                    key=f"yuk_resimleri_dedupe_{safe_name(sec_musteri)}_{safe_name(proforma_gosterim)}"
                 )
 
                 if files:
@@ -3324,16 +3910,36 @@ elif menu == "ETA İzleme":
         filtre = (df_eta["Müşteri Adı"] == sec_musteri) & (df_eta["Proforma No"] == sec_proforma)
         if filtre.any():
             mevcut_eta = df_eta.loc[filtre, "ETA Tarihi"].values[0]
-            mevcut_aciklama = df_eta.loc[filtre, "Açıklama"].values[0]
+            mevcut_aciklama = df_eta.loc[filtre, "Açıklama"].values[0],
+            mevcut_sevk = df_eta.loc[filtre, "Sevk Tarihi"].values[0]            
         else:
             mevcut_eta = ""
             mevcut_aciklama = ""
+            mevcut_sevk = ""
+        proforma_mask = (df_proforma["Müşteri Adı"] == sec_musteri) & (df_proforma["Proforma No"] == sec_proforma)
+        mevcut_proforma_sevk = df_proforma.loc[proforma_mask, "Sevk Tarihi"].values[0] if proforma_mask.any() else ""
+
+        def _safe_date(value):
+            if value is None:
+                return None
+            if isinstance(value, str) and not value.strip():
+                return None
+            try:
+                ts = pd.to_datetime(value, errors="coerce")
+                
+            except Exception:
+                return None
+            if pd.isna(ts):
+                return None
+            try:
+                return ts.date()
+            except Exception:
+                return None
 
         with st.form("edit_eta"):
-            try:
-                varsayilan_eta = pd.to_datetime(mevcut_eta).date() if mevcut_eta and pd.notnull(mevcut_eta) and str(mevcut_eta) != "NaT" else datetime.date.today()
-            except Exception:
-                varsayilan_eta = datetime.date.today()
+            varsayilan_eta = _safe_date(mevcut_eta) or datetime.date.today()
+            varsayilan_sevk = _safe_date(mevcut_sevk) or _safe_date(mevcut_proforma_sevk) or datetime.date.today()
+            sevk_tarih = st.date_input("Sevk Tarihi", value=varsayilan_sevk)          
             eta_tarih = st.date_input("ETA Tarihi", value=varsayilan_eta)
             aciklama = st.text_area("Açıklama", value=mevcut_aciklama)
             guncelle = st.form_submit_button("ETA'yı Kaydet/Güncelle")
@@ -3342,16 +3948,20 @@ elif menu == "ETA İzleme":
 
             if guncelle:
                 if filtre.any():
+                    df_eta.loc[filtre, "Sevk Tarihi"] = sevk_tarih                    
                     df_eta.loc[filtre, "ETA Tarihi"] = eta_tarih
                     df_eta.loc[filtre, "Açıklama"] = aciklama
                 else:
                     new_row = {
                         "Müşteri Adı": sec_musteri,
                         "Proforma No": sec_proforma,
+                        "Sevk Tarihi": sevk_tarih,                        
                         "ETA Tarihi": eta_tarih,
                         "Açıklama": aciklama
                     }
                     df_eta = pd.concat([df_eta, pd.DataFrame([new_row])], ignore_index=True)
+                if proforma_mask.any():
+                    df_proforma.loc[proforma_mask, "Sevk Tarihi"] = sevk_tarih                 
                 update_excel()
                 st.success("ETA kaydedildi/güncellendi!")
                 st.rerun()
@@ -3379,15 +3989,27 @@ elif menu == "ETA İzleme":
 
     # ==== ETA TAKİP LİSTESİ ====
     st.markdown("#### ETA Takip Listesi")
-    for col in ["Proforma No", "ETA Tarihi"]:
+    for col in ["Proforma No", "Sevk Tarihi", "ETA Tarihi"]:
         if col not in df_eta.columns:
             df_eta[col] = ""
     if not df_eta.empty:
-        df_eta["ETA Tarihi"] = pd.to_datetime(df_eta["ETA Tarihi"], errors="coerce")
-        today = pd.to_datetime(datetime.date.today())
-        df_eta["Kalan Gün"] = (df_eta["ETA Tarihi"] - today).dt.days
-        tablo = df_eta[["Müşteri Adı", "Proforma No", "ETA Tarihi", "Kalan Gün", "Açıklama"]].copy()
-        tablo = tablo.sort_values(["ETA Tarihi", "Müşteri Adı", "Proforma No"], ascending=[True, True, True])
+        df_eta_display = df_eta.copy()
+        df_eta_display["ETA Tarihi"] = pd.to_datetime(
+            df_eta_display["ETA Tarihi"], errors="coerce", dayfirst=True
+        )
+        df_eta_display["Sevk Tarihi"] = pd.to_datetime(
+            df_eta_display["Sevk Tarihi"], errors="coerce", dayfirst=True
+        )
+        df_eta_display["ETA Tarihi"] = df_eta_display["ETA Tarihi"].dt.normalize()
+        df_eta_display["Sevk Tarihi"] = df_eta_display["Sevk Tarihi"].dt.normalize()
+        today = pd.Timestamp.today().normalize()
+        df_eta_display["Kalan Gün"] = (df_eta_display["ETA Tarihi"] - today).dt.days
+        df_eta_display = df_eta_display.sort_values(["ETA Tarihi", "Müşteri Adı", "Proforma No"], ascending=[True, True, True])
+        tablo = df_eta_display[["Müşteri Adı", "Proforma No", "Sevk Tarihi", "ETA Tarihi", "Kalan Gün", "Açıklama"]].copy()
+        tablo["ETA Tarihi"] = tablo["ETA Tarihi"].dt.strftime("%d/%m/%Y")
+        tablo["Sevk Tarihi"] = tablo["Sevk Tarihi"].dt.strftime("%d/%m/%Y")
+        tablo["ETA Tarihi"] = tablo["ETA Tarihi"].fillna("").replace({"NaT": ""})
+        tablo["Sevk Tarihi"] = tablo["Sevk Tarihi"].fillna("").replace({"NaT": ""})
         st.dataframe(tablo, use_container_width=True)
 
         st.markdown("##### ETA Kaydı Sil")
@@ -3450,15 +4072,18 @@ elif menu == "ETA İzleme":
             # ETA ekle/güncelle
             filtre_eta = (df_eta["Müşteri Adı"] == musteri) & (df_eta["Proforma No"] == pno)
             eta_deger = pd.to_datetime(yeni_eta) if yeni_eta else ""
+            sevk_kaydi = df_proforma.at[idx[0], "Sevk Tarihi"] if len(idx) > 0 and "Sevk Tarihi" in df_proforma.columns else ""            
             if filtre_eta.any():
                 if yeni_eta:
                     df_eta.loc[filtre_eta, "ETA Tarihi"] = eta_deger
                 if aciklama_geri:
                     df_eta.loc[filtre_eta, "Açıklama"] = aciklama_geri
+                df_eta.loc[filtre_eta, "Sevk Tarihi"] = sevk_kaydi                    
             else:
                 yeni_satir = {
                     "Müşteri Adı": musteri,
                     "Proforma No": pno,
+                    "Sevk Tarihi": sevk_kaydi,                    
                     "ETA Tarihi": eta_deger if yeni_eta else "",
                     "Açıklama": aciklama_geri,
                 }
@@ -3478,14 +4103,19 @@ elif menu == "ETA İzleme":
             ulasanlar["Termin Tarihi"] = pd.to_datetime(ulasanlar["Termin Tarihi"], errors="coerce")
         else:
             ulasanlar["Termin Tarihi"] = pd.NaT
+        if "Tarih" in ulasanlar.columns:
+            ulasanlar["Proforma Tarihi"] = pd.to_datetime(ulasanlar["Tarih"], errors="coerce")
+        else:
+            ulasanlar["Proforma Tarihi"] = pd.NaT            
         ulasanlar["Ulaşma Tarihi"] = pd.to_datetime(ulasanlar["Ulaşma Tarihi"], errors="coerce")
 
-        ulasanlar["Gün Farkı"] = (ulasanlar["Ulaşma Tarihi"] - ulasanlar["Termin Tarihi"]).dt.days
+        ulasanlar["Gün Farkı"] = (ulasanlar["Sevk Tarihi"] - ulasanlar["Proforma Tarihi"]).dt.days
+        ulasanlar["Proforma Tarihi"] = ulasanlar["Proforma Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Sevk Tarihi"] = ulasanlar["Sevk Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Termin Tarihi"] = ulasanlar["Termin Tarihi"].dt.strftime("%d/%m/%Y")
         ulasanlar["Ulaşma Tarihi"] = ulasanlar["Ulaşma Tarihi"].dt.strftime("%d/%m/%Y")
-
-        tablo = ulasanlar[["Müşteri Adı", "Proforma No", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi", "Gün Farkı", "Tutar", "Açıklama"]]
+        
+        tablo = ulasanlar[["Müşteri Adı", "Proforma No", "Proforma Tarihi", "Termin Tarihi", "Sevk Tarihi", "Ulaşma Tarihi", "Gün Farkı", "Tutar", "Açıklama"]]
         st.dataframe(tablo, use_container_width=True)
     else:
         st.info("Henüz ulaşan sipariş yok.")
