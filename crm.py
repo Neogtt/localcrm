@@ -531,9 +531,25 @@ def get_drive():
             service_account_info, scopes=scopes
         )
         gauth.credentials = credentials
-    else:
-        gauth.LocalWebserverAuth()
-    return GoogleDrive(gauth)
+       return GoogleDrive(gauth)
+
+    error_msg = (
+        "Google Drive API kimlik bilgileri bulunamadı. Lütfen Streamlit "
+        "Secrets içerisinde `google_drive_service_account` anahtarına servis "
+        "hesabı JSON içeriğini ekleyin veya `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` "
+        "ortam değişkenini tanımlayın."
+    )
+
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+    except Exception:
+        get_script_run_ctx = None
+
+    if get_script_run_ctx is None or get_script_run_ctx() is None:
+        raise RuntimeError(error_msg)
+
+    st.error(error_msg)
+    st.stop()
 drive = get_drive()
 
 downloaded = drive.CreateFile({'id': EXCEL_FILE_ID})
