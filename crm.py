@@ -523,7 +523,7 @@ def _parse_service_account_info(raw_value):
 
     return None
 
-    @st.cache_resource
+@st.cache_resource
 def get_drive():
     gauth = GoogleAuth()
 
