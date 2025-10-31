@@ -676,7 +676,7 @@ def load_dataframes_from_excel(path: str = "temp.xlsx"):
             df_fuar_musteri = pd.DataFrame(columns=[
                 "Fuar Adı", "Müşteri Adı", "Ülke", "Telefon", "E-mail", "Açıklamalar", "Tarih"
             ])
-          try:
+        try:
             df_temsilciler = pd.read_excel(path, sheet_name="Temsilciler")
         except Exception:
             df_temsilciler = pd.DataFrame(DEFAULT_TEMSILCI_KAYITLARI)
